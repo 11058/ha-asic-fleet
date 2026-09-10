@@ -1,0 +1,3 @@
+
+
+{"STATUS": {"STATUS": "S", "when": 1789049580, "Msg": "summary", "api_version": "1.0.0"}, "INFO": {"miner_version": "81.0-1.0.0", "CompileTime": "Wed Nov 30 12:00:11 CST 2022", "type": "Antminer L7"}, "SUMMARY": [{"elapsed": 455471, "rate_5s": 9261.02, "rate_30m": 9731.66, "rate_avg": 9690.48, "rate_ideal": 9618.11, "rate_unit": "MH/s", "hw_all": 6596, "bestshare": 0, "status": [{"type": "rate", "status": "s", "code": 0, "msg": ""}, {"type": "network", "status": "s", "code": 0, "msg": ""}, {"type": "fans", "status": "s", "code": 0, "msg": ""}, {"type": "temp", "status": "s", "code": 0, "msg": ""}]}]}

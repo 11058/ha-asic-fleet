@@ -1,0 +1,95 @@
+block:
+  target:
+    device:
+      integration: asic_fleet
+    entity:
+      integration: asic_fleet
+
+unblock:
+  target:
+    device:
+      integration: asic_fleet
+    entity:
+      integration: asic_fleet
+
+reboot:
+  target:
+    device:
+      integration: asic_fleet
+    entity:
+      integration: asic_fleet
+
+blink:
+  target:
+    device:
+      integration: asic_fleet
+    entity:
+      integration: asic_fleet
+  fields:
+    "on":
+      default: true
+      selector:
+        boolean:
+
+block_rack:
+  fields:
+    rack:
+      required: true
+      example: R1
+      selector:
+        text:
+
+unblock_rack:
+  fields:
+    rack:
+      required: true
+      example: R1
+      selector:
+        text:
+
+reboot_rack:
+  fields:
+    rack:
+      required: true
+      example: R1
+      selector:
+        text:
+    stagger:
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 600
+          unit_of_measurement: s
+          mode: box
+
+assign_name:
+  fields:
+    mac:
+      required: true
+      example: "B4:2E:99:AA:BB:CC"
+      selector:
+        text:
+    name:
+      required: true
+      example: R1-ASIC57
+      selector:
+        text:
+    rack:
+      example: R1
+      selector:
+        text:
+
+set_pools:
+  target:
+    device:
+      integration: asic_fleet
+    entity:
+      integration: asic_fleet
+  fields:
+    pools:
+      required: true
+      selector:
+        object:
+
+refresh:

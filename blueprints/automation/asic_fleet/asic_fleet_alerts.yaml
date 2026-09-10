@@ -1,0 +1,108 @@
+blueprint:
+  name: ASIC Fleet alerts
+  description: >
+    Sends a notification whenever the ASIC Fleet integration raises a problem
+    on a miner, and optionally when the problem clears. Pick which severities
+    are worth waking someone up for, and where the message goes.
+  domain: automation
+  source_url: https://github.com/11058/ha-asic-fleet/blob/main/blueprints/automation/asic_fleet/asic_fleet_alerts.yaml
+  input:
+    severities:
+      name: Severities to alert on
+      description: >
+        critical = miner gone, zero hashrate, over the critical temperature.
+        warning = degraded but still running. info = naming/addressing notices.
+      default: [critical, warning]
+      selector:
+        select:
+          multiple: true
+          options:
+            - critical
+            - warning
+            - info
+    notify_action:
+      name: Notification action
+      description: >
+        What to run when a problem is raised. Available variables inside:
+        miner, rack, problem, severity, ip, port, details, message.
+      selector:
+        action: {}
+    notify_on_clear:
+      name: Also notify on recovery
+      default: false
+      selector:
+        boolean: {}
+    clear_action:
+      name: Recovery action
+      description: Only used when "Also notify on recovery" is on.
+      default: []
+      selector:
+        action: {}
+    rack_filter:
+      name: Limit to one rack
+      description: Leave empty to alert on every rack.
+      default: ""
+      selector:
+        text: {}
+
+mode: queued
+max: 50
+
+triggers:
+  - trigger: event
+    event_type: asic_fleet_problem
+    id: problem
+  - trigger: event
+    event_type: asic_fleet_cleared
+    id: cleared
+
+variables:
+  severities: !input severities
+  rack_filter: !input rack_filter
+  notify_on_clear: !input notify_on_clear
+  miner: "{{ trigger.event.data.name }}"
+  rack: "{{ trigger.event.data.rack | default('') }}"
+  problem: "{{ trigger.event.data.problem }}"
+  severity: "{{ trigger.event.data.severity | default('info') }}"
+  ip: "{{ trigger.event.data.ip | default('') }}"
+  port: "{{ trigger.event.data.port | default('') }}"
+  details: "{{ trigger.event.data.details | default({}) }}"
+  problem_text: >
+    {% set map = {
+      'offline': 'не отвечает',
+      'overheat': 'перегрев',
+      'overheat_critical': 'критический перегрев',
+      'hashrate_low': 'просел хешрейт',
+      'hashrate_zero': 'хешрейт ноль',
+      'fan': 'проблема с вентилятором',
+      'chips': 'вышли из строя чипы',
+      'hw_errors': 'много аппаратных ошибок',
+      'block_desync': 'блокировка не применилась на firewall',
+      'ip_changed': 'сменился IP',
+      'unnamed': 'майнер без имени'
+    } %}
+    {{ map.get(problem, problem) }}
+  message: >
+    {{ miner }}{% if rack %} ({{ rack }}){% endif %}: {{ problem_text }}
+    {%- if details %} — {{ details | tojson }}{% endif %}
+
+conditions:
+  - condition: template
+    value_template: >
+      {{ (rack_filter | trim == '') or (rack | lower == rack_filter | lower) }}
+  - condition: template
+    value_template: >
+      {{ trigger.id == 'cleared' or severity in severities }}
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: problem
+        sequence: !input notify_action
+      - conditions:
+          - condition: trigger
+            id: cleared
+          - condition: template
+            value_template: "{{ notify_on_clear }}"
+        sequence: !input clear_action

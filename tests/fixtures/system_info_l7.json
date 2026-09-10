@@ -1,0 +1,16 @@
+{
+ "minertype": "Antminer L7",
+ "nettype": "DHCP",
+ "netdevice": "eth0",
+ "macaddr": "A4:5E:38:00:00:01",
+ "hostname": "R1-ASIC1",
+ "ipaddress": "10.0.0.10",
+ "netmask": "255.255.248.0",
+ "gateway": "",
+ "dnsservers": "",
+ "system_mode": "GNU/Linux",
+ "system_kernel_version": "Linux 4.6.0-xilinx-g03c746f7 #31 SMP PREEMPT Tue Apr 12 17:55:05 CST 2022",
+ "system_filesystem_version": "V0.04",
+ "firmware_type": "Promminer_L7_7007",
+ "Algorithm": "Scrypt"
+}

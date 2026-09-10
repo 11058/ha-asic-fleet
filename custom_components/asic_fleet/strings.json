@@ -1,0 +1,184 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MikroTik router",
+        "description": "The router that hands out DHCP leases to the miners and holds the firewall block lists.",
+        "data": {
+          "router_host": "Host or IP",
+          "router_username": "Username",
+          "router_password": "Password",
+          "router_tls": "Use HTTPS (www-ssl)",
+          "router_verify_ssl": "Verify certificate"
+        }
+      },
+      "asic": {
+        "title": "Miner web credentials",
+        "description": "Digest-auth credentials for the miners' web UI. Antminer defaults are root / root.",
+        "data": {
+          "asic_username": "Username",
+          "asic_password": "Password",
+          "asic_port": "HTTP port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the RouterOS REST API. Check that /ip service www (or www-ssl) is enabled and permits Home Assistant's IP.",
+      "invalid_auth": "RouterOS rejected these credentials."
+    },
+    "abort": {
+      "already_configured": "This router is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ASIC Fleet options",
+        "data": {
+          "scan_interval": "Poll interval (seconds)",
+          "hostname_pattern": "Hostname pattern (regex with rack/index groups)",
+          "probe_unknown": "Probe unknown DHCP leases for miners",
+          "blocklist": "Firewall address-list (IP entries)",
+          "marker_list": "Firewall address-list (block intent markers)",
+          "temp_warn": "Temperature warning (°C)",
+          "temp_crit": "Temperature critical (°C)",
+          "hashrate_warn_pct": "Hashrate warning threshold (% of nominal)",
+          "fan_min_rpm": "Minimum acceptable fan speed (rpm)",
+          "hw_error_pct": "Hardware error warning threshold (%)",
+          "offline_grace": "Offline grace period (seconds)",
+          "fail_threshold": "Consecutive polls before raising a problem",
+          "allow_reboot": "Allow reboot",
+          "allow_pool_write": "Allow pool configuration writes"
+        },
+        "data_description": {
+          "probe_unknown": "Finds miners that never publish a DHCP hostname (e.g. Antminer L9) by asking each unknown lease whether it answers the miner CGI API.",
+          "fail_threshold": "Guards against single-poll blips raising false alarms.",
+          "allow_pool_write": "set_miner_conf.cgi replaces the miner's whole config. Leave off unless you need it."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "hashrate": { "name": "Hashrate" },
+      "hashrate_avg": { "name": "Hashrate average" },
+      "efficiency": { "name": "Efficiency" },
+      "temp_max": { "name": "Temperature max" },
+      "temp_avg": { "name": "Temperature average" },
+      "fan_min": { "name": "Fan min" },
+      "fan_max": { "name": "Fan max" },
+      "chip_health": { "name": "Chip health" },
+      "hw_error_pct": { "name": "Hardware errors" },
+      "uptime": { "name": "Uptime" },
+      "status": {
+        "name": "Status",
+        "state": {
+          "online": "Online",
+          "offline": "Offline",
+          "blocked": "Blocked",
+          "degraded": "Degraded",
+          "critical": "Critical"
+        }
+      },
+      "ip_address": { "name": "IP address" },
+      "switch_port": { "name": "Switch port" },
+      "pool": { "name": "Pool" },
+      "last_seen": { "name": "Last seen" },
+      "fleet_hashrate": { "name": "Fleet hashrate" },
+      "miners_total": { "name": "Miners total" },
+      "miners_online": { "name": "Miners online" },
+      "miners_offline": { "name": "Miners offline" },
+      "miners_blocked": { "name": "Miners blocked" },
+      "miners_with_problems": { "name": "Miners with problems" },
+      "fleet_temp_max": { "name": "Fleet temperature max" },
+      "unnamed_miners": { "name": "Unnamed miners" }
+    },
+    "binary_sensor": {
+      "online": { "name": "Online" },
+      "problem": { "name": "Problem" },
+      "overheating": { "name": "Overheating" },
+      "hashrate_problem": { "name": "Hashrate problem" },
+      "hardware_problem": { "name": "Hardware problem" },
+      "block_desync": { "name": "Block out of sync" },
+      "router_online": { "name": "Router online" },
+      "fleet_problem": { "name": "Fleet problem" }
+    },
+    "switch": {
+      "internet": { "name": "Internet" }
+    },
+    "button": {
+      "reboot": { "name": "Reboot" },
+      "blink": { "name": "Locate" },
+      "refresh": { "name": "Refresh fleet" }
+    }
+  },
+  "services": {
+    "block": {
+      "name": "Block internet",
+      "description": "Cut the miner's WAN access at the router."
+    },
+    "unblock": {
+      "name": "Unblock internet",
+      "description": "Restore the miner's WAN access."
+    },
+    "reboot": {
+      "name": "Reboot",
+      "description": "Reboot the miner via its web API."
+    },
+    "blink": {
+      "name": "Locate",
+      "description": "Flash the miner's locate LED.",
+      "fields": {
+        "on": { "name": "On", "description": "Turn the LED on or off." }
+      }
+    },
+    "block_rack": {
+      "name": "Block rack",
+      "description": "Cut WAN access for every miner in a rack.",
+      "fields": {
+        "rack": { "name": "Rack", "description": "Rack id, e.g. R1." }
+      }
+    },
+    "unblock_rack": {
+      "name": "Unblock rack",
+      "description": "Restore WAN access for every miner in a rack.",
+      "fields": {
+        "rack": { "name": "Rack", "description": "Rack id, e.g. R1." }
+      }
+    },
+    "reboot_rack": {
+      "name": "Reboot rack",
+      "description": "Reboot every miner in a rack, optionally spaced out in time.",
+      "fields": {
+        "rack": { "name": "Rack", "description": "Rack id, e.g. R1." },
+        "stagger": {
+          "name": "Stagger",
+          "description": "Seconds to wait between miners so the load ramps instead of stepping."
+        }
+      }
+    },
+    "assign_name": {
+      "name": "Assign name",
+      "description": "Give a permanent name to a miner that reports no DHCP hostname, keyed by MAC.",
+      "fields": {
+        "mac": { "name": "MAC", "description": "MAC address of the miner." },
+        "name": { "name": "Name", "description": "Name to display, e.g. R1-ASIC57." },
+        "rack": { "name": "Rack", "description": "Rack this miner belongs to." }
+      }
+    },
+    "set_pools": {
+      "name": "Set pools",
+      "description": "Rewrite the miner's pool list. Requires the pool-write option to be enabled.",
+      "fields": {
+        "pools": {
+          "name": "Pools",
+          "description": "List of up to three pools, each with url, user and pass."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Refresh",
+      "description": "Poll the router and every miner immediately."
+    }
+  }
+}

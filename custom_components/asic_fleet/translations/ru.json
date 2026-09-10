@@ -1,0 +1,184 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Роутер MikroTik",
+        "description": "Роутер, который раздаёт DHCP-аренды майнерам и держит списки блокировки в firewall.",
+        "data": {
+          "router_host": "Хост или IP",
+          "router_username": "Пользователь",
+          "router_password": "Пароль",
+          "router_tls": "Использовать HTTPS (www-ssl)",
+          "router_verify_ssl": "Проверять сертификат"
+        }
+      },
+      "asic": {
+        "title": "Доступ к веб-интерфейсу майнеров",
+        "description": "Логин и пароль digest-авторизации веб-интерфейса. У Antminer по умолчанию root / root.",
+        "data": {
+          "asic_username": "Пользователь",
+          "asic_password": "Пароль",
+          "asic_port": "HTTP-порт"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "REST API RouterOS недоступен. Проверьте, что /ip service www (или www-ssl) включён и разрешает IP Home Assistant.",
+      "invalid_auth": "RouterOS отклонил эти учётные данные."
+    },
+    "abort": {
+      "already_configured": "Этот роутер уже настроен."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Настройки ASIC Fleet",
+        "data": {
+          "scan_interval": "Интервал опроса (секунды)",
+          "hostname_pattern": "Шаблон имени хоста (regex с группами rack/index)",
+          "probe_unknown": "Опрашивать неизвестные DHCP-аренды на предмет майнеров",
+          "blocklist": "Address-list с IP-адресами",
+          "marker_list": "Address-list с маркерами блокировки",
+          "temp_warn": "Предупреждение по температуре (°C)",
+          "temp_crit": "Критическая температура (°C)",
+          "hashrate_warn_pct": "Порог хешрейта (% от номинала)",
+          "fan_min_rpm": "Минимальные обороты вентилятора (об/мин)",
+          "hw_error_pct": "Порог аппаратных ошибок (%)",
+          "offline_grace": "Задержка перед статусом offline (секунды)",
+          "fail_threshold": "Сколько опросов подряд до объявления проблемы",
+          "allow_reboot": "Разрешить перезагрузку",
+          "allow_pool_write": "Разрешить запись конфигурации пулов"
+        },
+        "data_description": {
+          "probe_unknown": "Находит майнеры, которые не сообщают hostname по DHCP (например Antminer L9): каждая неизвестная аренда проверяется запросом к CGI-API майнера.",
+          "fail_threshold": "Защита от ложных тревог из-за одиночного сбойного опроса.",
+          "allow_pool_write": "set_miner_conf.cgi перезаписывает конфиг майнера целиком. Включайте только при необходимости."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "hashrate": { "name": "Хешрейт" },
+      "hashrate_avg": { "name": "Хешрейт средний" },
+      "efficiency": { "name": "Эффективность" },
+      "temp_max": { "name": "Температура макс" },
+      "temp_avg": { "name": "Температура средняя" },
+      "fan_min": { "name": "Вентилятор мин" },
+      "fan_max": { "name": "Вентилятор макс" },
+      "chip_health": { "name": "Исправность чипов" },
+      "hw_error_pct": { "name": "Аппаратные ошибки" },
+      "uptime": { "name": "Время работы" },
+      "status": {
+        "name": "Статус",
+        "state": {
+          "online": "В работе",
+          "offline": "Не отвечает",
+          "blocked": "Заблокирован",
+          "degraded": "Деградация",
+          "critical": "Критично"
+        }
+      },
+      "ip_address": { "name": "IP-адрес" },
+      "switch_port": { "name": "Порт коммутатора" },
+      "pool": { "name": "Пул" },
+      "last_seen": { "name": "Последний ответ" },
+      "fleet_hashrate": { "name": "Хешрейт фермы" },
+      "miners_total": { "name": "Всего майнеров" },
+      "miners_online": { "name": "Майнеров в работе" },
+      "miners_offline": { "name": "Майнеров не отвечает" },
+      "miners_blocked": { "name": "Майнеров заблокировано" },
+      "miners_with_problems": { "name": "Майнеров с проблемами" },
+      "fleet_temp_max": { "name": "Температура макс по ферме" },
+      "unnamed_miners": { "name": "Майнеров без имени" }
+    },
+    "binary_sensor": {
+      "online": { "name": "На связи" },
+      "problem": { "name": "Проблема" },
+      "overheating": { "name": "Перегрев" },
+      "hashrate_problem": { "name": "Проблема хешрейта" },
+      "hardware_problem": { "name": "Аппаратная проблема" },
+      "block_desync": { "name": "Блокировка рассинхронизирована" },
+      "router_online": { "name": "Роутер на связи" },
+      "fleet_problem": { "name": "Проблема на ферме" }
+    },
+    "switch": {
+      "internet": { "name": "Интернет" }
+    },
+    "button": {
+      "reboot": { "name": "Перезагрузка" },
+      "blink": { "name": "Найти (LED)" },
+      "refresh": { "name": "Обновить данные" }
+    }
+  },
+  "services": {
+    "block": {
+      "name": "Заблокировать интернет",
+      "description": "Отрезать майнеру доступ в интернет на роутере."
+    },
+    "unblock": {
+      "name": "Разблокировать интернет",
+      "description": "Вернуть майнеру доступ в интернет."
+    },
+    "reboot": {
+      "name": "Перезагрузить",
+      "description": "Перезагрузить майнер через его веб-API."
+    },
+    "blink": {
+      "name": "Найти",
+      "description": "Помигать LED-индикатором майнера.",
+      "fields": {
+        "on": { "name": "Включить", "description": "Включить или выключить индикатор." }
+      }
+    },
+    "block_rack": {
+      "name": "Заблокировать стойку",
+      "description": "Отрезать интернет всем майнерам стойки.",
+      "fields": {
+        "rack": { "name": "Стойка", "description": "Идентификатор стойки, например R1." }
+      }
+    },
+    "unblock_rack": {
+      "name": "Разблокировать стойку",
+      "description": "Вернуть интернет всем майнерам стойки.",
+      "fields": {
+        "rack": { "name": "Стойка", "description": "Идентификатор стойки, например R1." }
+      }
+    },
+    "reboot_rack": {
+      "name": "Перезагрузить стойку",
+      "description": "Перезагрузить все майнеры стойки, при желании с паузой между ними.",
+      "fields": {
+        "rack": { "name": "Стойка", "description": "Идентификатор стойки, например R1." },
+        "stagger": {
+          "name": "Пауза",
+          "description": "Секунд между майнерами, чтобы нагрузка менялась плавно, а не ступенькой."
+        }
+      }
+    },
+    "assign_name": {
+      "name": "Назначить имя",
+      "description": "Задать постоянное имя майнеру, который не сообщает hostname по DHCP. Ключ — MAC-адрес.",
+      "fields": {
+        "mac": { "name": "MAC", "description": "MAC-адрес майнера." },
+        "name": { "name": "Имя", "description": "Отображаемое имя, например R1-ASIC57." },
+        "rack": { "name": "Стойка", "description": "Стойка, к которой относится майнер." }
+      }
+    },
+    "set_pools": {
+      "name": "Задать пулы",
+      "description": "Перезаписать список пулов майнера. Требует включённой опции записи пулов.",
+      "fields": {
+        "pools": {
+          "name": "Пулы",
+          "description": "До трёх пулов, каждый с полями url, user и pass."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Обновить",
+      "description": "Немедленно опросить роутер и все майнеры."
+    }
+  }
+}
