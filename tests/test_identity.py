@@ -27,8 +27,7 @@ class TestMarker:
         # Backward compatibility: this is what the existing lease-script and
         # the YAML package already wrote.
         assert (
-            identity.resolve_marker("AA:BB:CC:DD:EE:FF", "R1-ASIC7", True)
-            == "R1-ASIC7"
+            identity.resolve_marker("AA:BB:CC:DD:EE:FF", "R1-ASIC7", True) == "R1-ASIC7"
         )
 
     def test_missing_hostname_falls_back_to_mac(self) -> None:
