@@ -4,4 +4,6 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
-ignore = ["RUF012"]
+# RUF001-3 flag Cyrillic letters as "ambiguous"; the dashboard generator holds
+# Russian UI labels on purpose.
+ignore = ["RUF012", "RUF001", "RUF002", "RUF003"]

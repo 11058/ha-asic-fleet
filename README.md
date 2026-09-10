@@ -152,6 +152,14 @@ named after their rack, so an area would produce
 `sensor.r1_r1_asic7_hashrate`. Assign areas by hand if you want them; the rack
 remains available as an attribute and as a service target.
 
+## Dashboard
+
+`dashboards/generate_view.py` builds a ready-made view — fleet summary, filtered
+problem lists, rack controls, per-miner readouts and switches — from whatever
+miners exist, and can install it as a tab on an existing dashboard. Built-in
+cards only, and the `sections` layout reflows from laptop to phone. See
+[dashboards/README.md](dashboards/README.md).
+
 ## Install
 
 ### HACS
