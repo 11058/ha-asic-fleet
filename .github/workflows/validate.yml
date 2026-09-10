@@ -46,3 +46,37 @@ jobs:
           python-version: "3.13"
       - run: pip install pytest httpx
       - run: pytest tests -q
+
+  imports:
+    name: import against Home Assistant
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # hassfest checks the manifest, not the code. Importing every module
+      # against a real core is what catches helper functions moving between
+      # releases, which is how this integration first failed to load.
+      - run: pip install homeassistant
+      - name: Import every module
+        run: |
+          python - <<'EOF'
+          import importlib, sys
+          sys.path.insert(0, ".")
+          modules = [
+              "const", "identity", "mikrotik", "asic_api", "coordinator",
+              "entity", "config_flow", "sensor", "binary_sensor", "switch",
+              "button", "diagnostics", "",
+          ]
+          failed = []
+          for name in modules:
+              full = "custom_components.asic_fleet" + (f".{name}" if name else "")
+              try:
+                  importlib.import_module(full)
+                  print("ok  ", full)
+              except Exception as err:
+                  print("FAIL", full, "->", type(err).__name__, err)
+                  failed.append(full)
+          sys.exit(1 if failed else 0)
+          EOF
