@@ -12,7 +12,12 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    EntityCategory,
+    UnitOfPower,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -51,6 +56,9 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
             "rate_30m": r.telemetry.rate_30m,
             "rate_avg": r.telemetry.rate_avg,
             "rate_ideal": r.telemetry.rate_ideal,
+            # L7s report MH/s and L9s GH/s; everything here is normalised to
+            # MH/s, so keep the raw unit visible.
+            "reported_unit": r.telemetry.reported_unit,
         },
     ),
     AsicSensorDescription(
@@ -110,6 +118,15 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
         value_fn=lambda r: r.telemetry.fan_max,
+    ),
+    AsicSensorDescription(
+        key="power",
+        translation_key="power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda r: r.telemetry.power,
     ),
     AsicSensorDescription(
         key="chip_health",
@@ -220,6 +237,23 @@ FLEET_SENSORS: tuple[FleetSensorDescription, ...] = (
         suggested_display_precision=0,
         value_fn=lambda d: _sum(d, "rate_5s"),
         attrs_fn=lambda d: {"ideal": _sum(d, "rate_ideal")},
+    ),
+    FleetSensorDescription(
+        key="fleet_power",
+        translation_key="fleet_power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda d: _sum(d, "power") or None,
+        attrs_fn=lambda d: {
+            # Only newer firmware reports power, so say how much of the fleet
+            # this number actually covers.
+            "reporting": sum(
+                1 for r in d.asics.values() if r.telemetry.power is not None
+            ),
+            "of": len(d.asics),
+        },
     ),
     FleetSensorDescription(
         key="miners_total",

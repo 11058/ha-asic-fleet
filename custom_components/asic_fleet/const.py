@@ -99,8 +99,3 @@ SERVICE_REBOOT_RACK: Final = "reboot_rack"
 SERVICE_ASSIGN_NAME: Final = "assign_name"
 SERVICE_SET_POOLS: Final = "set_pools"
 SERVICE_REFRESH: Final = "refresh"
-
-# Marker prefix used in the Mikrotik address-list `comment` field for machines
-# that never report a DHCP hostname (e.g. Antminer L9). Hostname-bearing units
-# keep a bare-hostname comment so the pre-existing lease-script keeps working.
-MAC_MARKER_PREFIX: Final = "mac:"

@@ -60,16 +60,36 @@
   },
   "entity": {
     "sensor": {
-      "hashrate": { "name": "Hashrate" },
-      "hashrate_avg": { "name": "Hashrate average" },
-      "efficiency": { "name": "Efficiency" },
-      "temp_max": { "name": "Temperature max" },
-      "temp_avg": { "name": "Temperature average" },
-      "fan_min": { "name": "Fan min" },
-      "fan_max": { "name": "Fan max" },
-      "chip_health": { "name": "Chip health" },
-      "hw_error_pct": { "name": "Hardware errors" },
-      "uptime": { "name": "Uptime" },
+      "hashrate": {
+        "name": "Hashrate"
+      },
+      "hashrate_avg": {
+        "name": "Hashrate average"
+      },
+      "efficiency": {
+        "name": "Efficiency"
+      },
+      "temp_max": {
+        "name": "Temperature max"
+      },
+      "temp_avg": {
+        "name": "Temperature average"
+      },
+      "fan_min": {
+        "name": "Fan min"
+      },
+      "fan_max": {
+        "name": "Fan max"
+      },
+      "chip_health": {
+        "name": "Chip health"
+      },
+      "hw_error_pct": {
+        "name": "Hardware errors"
+      },
+      "uptime": {
+        "name": "Uptime"
+      },
       "status": {
         "name": "Status",
         "state": {
@@ -80,36 +100,90 @@
           "critical": "Critical"
         }
       },
-      "ip_address": { "name": "IP address" },
-      "switch_port": { "name": "Switch port" },
-      "pool": { "name": "Pool" },
-      "last_seen": { "name": "Last seen" },
-      "fleet_hashrate": { "name": "Fleet hashrate" },
-      "miners_total": { "name": "Miners total" },
-      "miners_online": { "name": "Miners online" },
-      "miners_offline": { "name": "Miners offline" },
-      "miners_blocked": { "name": "Miners blocked" },
-      "miners_with_problems": { "name": "Miners with problems" },
-      "fleet_temp_max": { "name": "Fleet temperature max" },
-      "unnamed_miners": { "name": "Unnamed miners" }
+      "ip_address": {
+        "name": "IP address"
+      },
+      "switch_port": {
+        "name": "Switch port"
+      },
+      "pool": {
+        "name": "Pool"
+      },
+      "last_seen": {
+        "name": "Last seen"
+      },
+      "fleet_hashrate": {
+        "name": "Fleet hashrate"
+      },
+      "miners_total": {
+        "name": "Miners total"
+      },
+      "miners_online": {
+        "name": "Miners online"
+      },
+      "miners_offline": {
+        "name": "Miners offline"
+      },
+      "miners_blocked": {
+        "name": "Miners blocked"
+      },
+      "miners_with_problems": {
+        "name": "Miners with problems"
+      },
+      "fleet_temp_max": {
+        "name": "Fleet temperature max"
+      },
+      "unnamed_miners": {
+        "name": "Unnamed miners"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "fleet_power": {
+        "name": "Fleet power"
+      }
     },
     "binary_sensor": {
-      "online": { "name": "Online" },
-      "problem": { "name": "Problem" },
-      "overheating": { "name": "Overheating" },
-      "hashrate_problem": { "name": "Hashrate problem" },
-      "hardware_problem": { "name": "Hardware problem" },
-      "block_desync": { "name": "Block out of sync" },
-      "router_online": { "name": "Router online" },
-      "fleet_problem": { "name": "Fleet problem" }
+      "online": {
+        "name": "Online"
+      },
+      "problem": {
+        "name": "Problem"
+      },
+      "overheating": {
+        "name": "Overheating"
+      },
+      "hashrate_problem": {
+        "name": "Hashrate problem"
+      },
+      "hardware_problem": {
+        "name": "Hardware problem"
+      },
+      "block_desync": {
+        "name": "Block out of sync"
+      },
+      "router_online": {
+        "name": "Router online"
+      },
+      "fleet_problem": {
+        "name": "Fleet problem"
+      }
     },
     "switch": {
-      "internet": { "name": "Internet" }
+      "internet": {
+        "name": "Internet"
+      }
     },
     "button": {
-      "reboot": { "name": "Reboot" },
-      "blink": { "name": "Locate" },
-      "refresh": { "name": "Refresh fleet" }
+      "reboot": {
+        "name": "Reboot"
+      },
+      "blink": {
+        "name": "Locate"
+      },
+      "refresh": {
+        "name": "Refresh fleet"
+      }
     }
   },
   "services": {
@@ -129,28 +203,40 @@
       "name": "Locate",
       "description": "Flash the miner's locate LED.",
       "fields": {
-        "on": { "name": "On", "description": "Turn the LED on or off." }
+        "on": {
+          "name": "On",
+          "description": "Turn the LED on or off."
+        }
       }
     },
     "block_rack": {
       "name": "Block rack",
       "description": "Cut WAN access for every miner in a rack.",
       "fields": {
-        "rack": { "name": "Rack", "description": "Rack id, e.g. R1." }
+        "rack": {
+          "name": "Rack",
+          "description": "Rack id, e.g. R1."
+        }
       }
     },
     "unblock_rack": {
       "name": "Unblock rack",
       "description": "Restore WAN access for every miner in a rack.",
       "fields": {
-        "rack": { "name": "Rack", "description": "Rack id, e.g. R1." }
+        "rack": {
+          "name": "Rack",
+          "description": "Rack id, e.g. R1."
+        }
       }
     },
     "reboot_rack": {
       "name": "Reboot rack",
       "description": "Reboot every miner in a rack, optionally spaced out in time.",
       "fields": {
-        "rack": { "name": "Rack", "description": "Rack id, e.g. R1." },
+        "rack": {
+          "name": "Rack",
+          "description": "Rack id, e.g. R1."
+        },
         "stagger": {
           "name": "Stagger",
           "description": "Seconds to wait between miners so the load ramps instead of stepping."
@@ -161,9 +247,18 @@
       "name": "Assign name",
       "description": "Give a permanent name to a miner that reports no DHCP hostname, keyed by MAC.",
       "fields": {
-        "mac": { "name": "MAC", "description": "MAC address of the miner." },
-        "name": { "name": "Name", "description": "Name to display, e.g. R1-ASIC57." },
-        "rack": { "name": "Rack", "description": "Rack this miner belongs to." }
+        "mac": {
+          "name": "MAC",
+          "description": "MAC address of the miner."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name to display, e.g. R1-ASIC57."
+        },
+        "rack": {
+          "name": "Rack",
+          "description": "Rack this miner belongs to."
+        }
       }
     },
     "set_pools": {

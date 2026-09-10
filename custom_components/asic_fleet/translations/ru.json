@@ -60,16 +60,36 @@
   },
   "entity": {
     "sensor": {
-      "hashrate": { "name": "Хешрейт" },
-      "hashrate_avg": { "name": "Хешрейт средний" },
-      "efficiency": { "name": "Эффективность" },
-      "temp_max": { "name": "Температура макс" },
-      "temp_avg": { "name": "Температура средняя" },
-      "fan_min": { "name": "Вентилятор мин" },
-      "fan_max": { "name": "Вентилятор макс" },
-      "chip_health": { "name": "Исправность чипов" },
-      "hw_error_pct": { "name": "Аппаратные ошибки" },
-      "uptime": { "name": "Время работы" },
+      "hashrate": {
+        "name": "Хешрейт"
+      },
+      "hashrate_avg": {
+        "name": "Хешрейт средний"
+      },
+      "efficiency": {
+        "name": "Эффективность"
+      },
+      "temp_max": {
+        "name": "Температура макс"
+      },
+      "temp_avg": {
+        "name": "Температура средняя"
+      },
+      "fan_min": {
+        "name": "Вентилятор мин"
+      },
+      "fan_max": {
+        "name": "Вентилятор макс"
+      },
+      "chip_health": {
+        "name": "Исправность чипов"
+      },
+      "hw_error_pct": {
+        "name": "Аппаратные ошибки"
+      },
+      "uptime": {
+        "name": "Время работы"
+      },
       "status": {
         "name": "Статус",
         "state": {
@@ -80,36 +100,90 @@
           "critical": "Критично"
         }
       },
-      "ip_address": { "name": "IP-адрес" },
-      "switch_port": { "name": "Порт коммутатора" },
-      "pool": { "name": "Пул" },
-      "last_seen": { "name": "Последний ответ" },
-      "fleet_hashrate": { "name": "Хешрейт фермы" },
-      "miners_total": { "name": "Всего майнеров" },
-      "miners_online": { "name": "Майнеров в работе" },
-      "miners_offline": { "name": "Майнеров не отвечает" },
-      "miners_blocked": { "name": "Майнеров заблокировано" },
-      "miners_with_problems": { "name": "Майнеров с проблемами" },
-      "fleet_temp_max": { "name": "Температура макс по ферме" },
-      "unnamed_miners": { "name": "Майнеров без имени" }
+      "ip_address": {
+        "name": "IP-адрес"
+      },
+      "switch_port": {
+        "name": "Порт коммутатора"
+      },
+      "pool": {
+        "name": "Пул"
+      },
+      "last_seen": {
+        "name": "Последний ответ"
+      },
+      "fleet_hashrate": {
+        "name": "Хешрейт фермы"
+      },
+      "miners_total": {
+        "name": "Всего майнеров"
+      },
+      "miners_online": {
+        "name": "Майнеров в работе"
+      },
+      "miners_offline": {
+        "name": "Майнеров не отвечает"
+      },
+      "miners_blocked": {
+        "name": "Майнеров заблокировано"
+      },
+      "miners_with_problems": {
+        "name": "Майнеров с проблемами"
+      },
+      "fleet_temp_max": {
+        "name": "Температура макс по ферме"
+      },
+      "unnamed_miners": {
+        "name": "Майнеров без имени"
+      },
+      "power": {
+        "name": "Потребление"
+      },
+      "fleet_power": {
+        "name": "Потребление фермы"
+      }
     },
     "binary_sensor": {
-      "online": { "name": "На связи" },
-      "problem": { "name": "Проблема" },
-      "overheating": { "name": "Перегрев" },
-      "hashrate_problem": { "name": "Проблема хешрейта" },
-      "hardware_problem": { "name": "Аппаратная проблема" },
-      "block_desync": { "name": "Блокировка рассинхронизирована" },
-      "router_online": { "name": "Роутер на связи" },
-      "fleet_problem": { "name": "Проблема на ферме" }
+      "online": {
+        "name": "На связи"
+      },
+      "problem": {
+        "name": "Проблема"
+      },
+      "overheating": {
+        "name": "Перегрев"
+      },
+      "hashrate_problem": {
+        "name": "Проблема хешрейта"
+      },
+      "hardware_problem": {
+        "name": "Аппаратная проблема"
+      },
+      "block_desync": {
+        "name": "Блокировка рассинхронизирована"
+      },
+      "router_online": {
+        "name": "Роутер на связи"
+      },
+      "fleet_problem": {
+        "name": "Проблема на ферме"
+      }
     },
     "switch": {
-      "internet": { "name": "Интернет" }
+      "internet": {
+        "name": "Интернет"
+      }
     },
     "button": {
-      "reboot": { "name": "Перезагрузка" },
-      "blink": { "name": "Найти (LED)" },
-      "refresh": { "name": "Обновить данные" }
+      "reboot": {
+        "name": "Перезагрузка"
+      },
+      "blink": {
+        "name": "Найти (LED)"
+      },
+      "refresh": {
+        "name": "Обновить данные"
+      }
     }
   },
   "services": {
@@ -129,28 +203,40 @@
       "name": "Найти",
       "description": "Помигать LED-индикатором майнера.",
       "fields": {
-        "on": { "name": "Включить", "description": "Включить или выключить индикатор." }
+        "on": {
+          "name": "Включить",
+          "description": "Включить или выключить индикатор."
+        }
       }
     },
     "block_rack": {
       "name": "Заблокировать стойку",
       "description": "Отрезать интернет всем майнерам стойки.",
       "fields": {
-        "rack": { "name": "Стойка", "description": "Идентификатор стойки, например R1." }
+        "rack": {
+          "name": "Стойка",
+          "description": "Идентификатор стойки, например R1."
+        }
       }
     },
     "unblock_rack": {
       "name": "Разблокировать стойку",
       "description": "Вернуть интернет всем майнерам стойки.",
       "fields": {
-        "rack": { "name": "Стойка", "description": "Идентификатор стойки, например R1." }
+        "rack": {
+          "name": "Стойка",
+          "description": "Идентификатор стойки, например R1."
+        }
       }
     },
     "reboot_rack": {
       "name": "Перезагрузить стойку",
       "description": "Перезагрузить все майнеры стойки, при желании с паузой между ними.",
       "fields": {
-        "rack": { "name": "Стойка", "description": "Идентификатор стойки, например R1." },
+        "rack": {
+          "name": "Стойка",
+          "description": "Идентификатор стойки, например R1."
+        },
         "stagger": {
           "name": "Пауза",
           "description": "Секунд между майнерами, чтобы нагрузка менялась плавно, а не ступенькой."
@@ -161,9 +247,18 @@
       "name": "Назначить имя",
       "description": "Задать постоянное имя майнеру, который не сообщает hostname по DHCP. Ключ — MAC-адрес.",
       "fields": {
-        "mac": { "name": "MAC", "description": "MAC-адрес майнера." },
-        "name": { "name": "Имя", "description": "Отображаемое имя, например R1-ASIC57." },
-        "rack": { "name": "Стойка", "description": "Стойка, к которой относится майнер." }
+        "mac": {
+          "name": "MAC",
+          "description": "MAC-адрес майнера."
+        },
+        "name": {
+          "name": "Имя",
+          "description": "Отображаемое имя, например R1-ASIC57."
+        },
+        "rack": {
+          "name": "Стойка",
+          "description": "Стойка, к которой относится майнер."
+        }
       }
     },
     "set_pools": {

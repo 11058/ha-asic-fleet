@@ -1,0 +1,72 @@
+{
+ "STATUS": {
+  "STATUS": "S",
+  "when": 1789051058,
+  "Msg": "pools",
+  "api_version": "1.0.0"
+ },
+ "INFO": {
+  "miner_version": "86.48-2.0.0",
+  "CompileTime": "Mon Feb 10 10:01:06 CST 2025",
+  "type": "Antminer L9"
+ },
+ "POOLS": [
+  {
+   "index": 0,
+   "url": "stratum+tcp://ltc.trustpool.cc:3333",
+   "user": "exampleworker.r1asic48",
+   "status": "Alive",
+   "priority": 0,
+   "getworks": 41823,
+   "accepted": 105925,
+   "rejected": 130,
+   "discarded": 0,
+   "stale": 289,
+   "diff": "",
+   "diff1": 27545452,
+   "diffa": 112540254208.0,
+   "diffr": 140771328,
+   "diffs": 306446336,
+   "lsdiff": 1048576,
+   "lstime": "0:0:2"
+  },
+  {
+   "index": 1,
+   "url": "stratum+tcp://ltc.trustpool.cc:443",
+   "user": "exampleworker.r1asic48",
+   "status": "Alive",
+   "priority": 1,
+   "getworks": 19,
+   "accepted": 224,
+   "rejected": 1,
+   "discarded": 0,
+   "stale": 1,
+   "diff": "",
+   "diff1": 7680,
+   "diffa": 31916032.0,
+   "diffr": 131072,
+   "diffs": 131072,
+   "lsdiff": 524288,
+   "lstime": "121:40:34"
+  },
+  {
+   "index": 2,
+   "url": "stratum+tcp://ltc.trustpool.cc:25",
+   "user": "exampleworker.r1asic48",
+   "status": "Alive",
+   "priority": 2,
+   "getworks": 0,
+   "accepted": 0,
+   "rejected": 0,
+   "discarded": 0,
+   "stale": 0,
+   "diff": "",
+   "diff1": 0,
+   "diffa": 0.0,
+   "diffr": 0,
+   "diffs": 0,
+   "lsdiff": 0,
+   "lstime": "0"
+  }
+ ]
+}

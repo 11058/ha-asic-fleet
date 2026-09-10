@@ -115,3 +115,43 @@ def test_garbage_payloads_do_not_raise() -> None:
         _parse_stats(payload, out)
         _parse_pools(payload, out)
     assert out.rate_5s is None
+
+
+class TestL9:
+    """An Antminer L9 on stock firmware — a different unit and extra fields."""
+
+    @pytest.fixture
+    def telemetry(self) -> AsicTelemetry:
+        out = AsicTelemetry()
+        _parse_summary(load("summary_l9.json"), out)
+        _parse_stats(load("stats_l9.json"), out)
+        _parse_pools(load("pools_l9.json"), out)
+        return out
+
+    def test_ghs_is_normalised_to_mhs(self, telemetry: AsicTelemetry) -> None:
+        # The miner reports 17.82 GH/s; a fleet total may not add that to an
+        # L7's MH/s figure without converting first.
+        assert telemetry.reported_unit == "GH/s"
+        assert telemetry.rate_unit == "MH/s"
+        assert telemetry.rate_5s == 17820.0
+        assert telemetry.rate_30m == 16200.0
+        assert telemetry.rate_avg == 16320.0
+        assert telemetry.rate_ideal == 16500.0
+        assert telemetry.efficiency == pytest.approx(1.08, abs=0.01)
+
+    def test_power_is_read(self, telemetry: AsicTelemetry) -> None:
+        assert telemetry.power == 3236
+
+    def test_model_and_thermals(self, telemetry: AsicTelemetry) -> None:
+        assert telemetry.model == "Antminer L9"
+        assert telemetry.chains == 3
+        assert telemetry.chip_total == 330
+        assert telemetry.chip_ok == 330
+        assert telemetry.fan_rpm == [3830, 3840, 3760, 3840]
+        assert telemetry.temp_max == 82
+        assert telemetry.hw_error_pct == 0.8841
+
+    def test_l7_power_is_absent_not_zero(self) -> None:
+        out = AsicTelemetry()
+        _parse_stats(load("stats_l7.json"), out)
+        assert out.power is None

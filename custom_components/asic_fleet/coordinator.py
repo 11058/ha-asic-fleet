@@ -45,7 +45,6 @@ from .const import (
     EVENT_CLEARED,
     EVENT_DISCOVERED,
     EVENT_PROBLEM,
-    MAC_MARKER_PREFIX,
     POLL_CONCURRENCY,
     PROBLEM_BLOCK_DESYNC,
     PROBLEM_CHIPS,
@@ -59,6 +58,15 @@ from .const import (
     PROBLEM_OVERHEAT_CRITICAL,
     PROBLEM_UNNAMED,
     SEVERITY,
+)
+from .identity import (
+    duplicate_hostnames,
+    is_generic,
+    marker_address,
+    parse_rack,
+    rack_from_name,
+    resolve_marker,
+    resolve_name,
 )
 from .mikrotik import MikrotikAuthError, MikrotikClient, MikrotikError
 
@@ -245,6 +253,11 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         records: dict[str, AsicRecord] = {}
         candidates: list[tuple[str, str, dict[str, Any]]] = []
 
+        # Stock firmware hands out "Antminer" as the DHCP hostname, so several
+        # machines can claim the same one. Knowing which names are contested is
+        # a precondition for naming anything.
+        collisions = duplicate_hostnames(lease.get("host-name") for lease in leases)
+
         for lease in leases:
             mac = _norm_mac(lease.get("mac-address", ""))
             ip = lease.get("active-address") or lease.get("address")
@@ -256,7 +269,15 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
 
             if match or alias or mac in self._confirmed:
                 records[mac] = self._build_record(
-                    mac, ip, hostname, match, alias, port_by_mac.get(mac), lease
+                    mac,
+                    ip,
+                    hostname,
+                    match,
+                    alias,
+                    port_by_mac.get(mac),
+                    lease,
+                    pattern,
+                    hostname.lower() in collisions,
                 )
             elif self._opt(CONF_PROBE_UNKNOWN, DEFAULT_PROBE_UNKNOWN):
                 skip = self._probe_skip.get(mac, 0)
@@ -266,7 +287,9 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
                     candidates.append((mac, ip, lease))
 
         if candidates:
-            await self._probe_candidates(candidates, port_by_mac, records, data)
+            await self._probe_candidates(
+                candidates, port_by_mac, records, data, pattern, collisions
+            )
 
         return records
 
@@ -279,41 +302,28 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         alias: dict[str, Any] | None,
         port: str | None,
         lease: dict[str, Any],
+        pattern: re.Pattern[str],
+        hostname_is_duplicate: bool = False,
     ) -> AsicRecord:
         probe = self._confirmed.get(mac, {})
-        rack = index = None
-        if match:
-            groups = match.groupdict()
-            rack = groups.get("rack")
-            raw_index = groups.get("index")
-            index = int(raw_index) if raw_index and raw_index.isdigit() else None
-            if rack and not rack.upper().startswith("R"):
-                rack = f"R{rack}"
+        rack, index = parse_rack(match)
 
         probe_hostname = str(probe.get("hostname") or "").strip()
-        if probe_hostname.lower() in ("localhost", "antminer", "unknown"):
-            probe_hostname = ""
+        name, named = resolve_name(
+            mac,
+            alias=str(alias["name"]) if alias and alias.get("name") else None,
+            lease_hostname=lease_hostname,
+            probe_hostname=probe_hostname,
+            hostname_is_duplicate=hostname_is_duplicate,
+        )
 
-        if alias and alias.get("name"):
-            name = str(alias["name"])
-            named = True
-        elif lease_hostname:
-            name = lease_hostname
-            named = True
-        elif probe_hostname:
-            name = probe_hostname
-            named = True
-        else:
-            name = f"ASIC {mac.replace(':', '')[-6:]}"
-            named = False
-
+        if rack is None and named and not is_generic(name):
+            # A miner named by its own firmware still belongs to a rack.
+            rack = rack_from_name(name, pattern)
         if alias and alias.get("rack"):
             rack = str(alias["rack"])
 
-        # The marker is what RouterOS matches on, so it must come from the DHCP
-        # hostname — never from a name the miner reports over HTTP, which the
-        # lease-script cannot see. Nameless machines are keyed by MAC instead.
-        marker = lease_hostname if lease_hostname else f"{MAC_MARKER_PREFIX}{mac}"
+        marker = resolve_marker(mac, lease_hostname, match is not None)
 
         return AsicRecord(
             mac=mac,
@@ -342,6 +352,8 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         port_by_mac: dict[str, str],
         records: dict[str, AsicRecord],
         data: FleetData,
+        pattern: re.Pattern[str],
+        collisions: set[str],
     ) -> None:
         """Ask unidentified leases whether they are miners.
 
@@ -381,14 +393,17 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
                 continue
 
             self._confirmed[mac] = info
+            lease_hostname = (lease.get("host-name") or "").strip()
             records[mac] = self._build_record(
                 mac,
                 ip,
-                (lease.get("host-name") or "").strip(),
-                None,
+                lease_hostname,
+                pattern.match(lease_hostname) if lease_hostname else None,
                 self.aliases.get(mac),
                 port_by_mac.get(mac),
                 lease,
+                pattern,
+                lease_hostname.lower() in collisions,
             )
             if mac not in self._announced:
                 self._announced.add(mac)
@@ -575,7 +590,7 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         if blocked:
             if not any(e.get("list") == self.marker_list for e in mine):
                 await self.router.add_address_list_entry(
-                    self.marker_list, "0.0.0.0", record.marker
+                    self.marker_list, marker_address(record.marker), record.marker
                 )
             if record.ip:
                 stale = [

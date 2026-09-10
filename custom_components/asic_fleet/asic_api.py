@@ -22,6 +22,19 @@ from .const import HTTP_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
 
+# Everything is normalised to MH/s. An L7 reports MH/s and an L9 reports GH/s
+# for numbers of the same order, so without this a fleet total would be the sum
+# of two different units.
+CANONICAL_RATE_UNIT = "MH/s"
+RATE_FACTORS = {
+    "h/s": 1e-6,
+    "kh/s": 1e-3,
+    "mh/s": 1.0,
+    "gh/s": 1e3,
+    "th/s": 1e6,
+    "ph/s": 1e9,
+}
+
 
 class AsicError(Exception):
     """Miner unreachable or answered with garbage."""
@@ -40,7 +53,9 @@ class AsicTelemetry:
     rate_30m: float | None = None
     rate_avg: float | None = None
     rate_ideal: float | None = None
-    rate_unit: str = "MH/s"
+    rate_unit: str = CANONICAL_RATE_UNIT
+    reported_unit: str | None = None
+    power: float | None = None
     efficiency: float | None = None
     elapsed: int | None = None
     hw_all: int | None = None
@@ -219,6 +234,14 @@ def _num(value: Any) -> float | None:
     return None
 
 
+def _scale(value: Any, factor: float) -> float | None:
+    number = _num(value)
+    if number is None:
+        return None
+    # Round away the float noise that scaling by 1000 introduces.
+    return round(number * factor, 4)
+
+
 def _parse_summary(payload: Any, out: AsicTelemetry) -> None:
     if not isinstance(payload, dict):
         return
@@ -231,11 +254,14 @@ def _parse_summary(payload: Any, out: AsicTelemetry) -> None:
     if not isinstance(summ, dict):
         return
 
-    out.rate_5s = _num(summ.get("rate_5s") or summ.get("GHS 5s"))
-    out.rate_30m = _num(summ.get("rate_30m") or summ.get("GHS 30m"))
-    out.rate_avg = _num(summ.get("rate_avg") or summ.get("GHS av"))
-    out.rate_ideal = _num(summ.get("rate_ideal"))
-    out.rate_unit = summ.get("rate_unit") or "MH/s"
+    reported_unit = summ.get("rate_unit") or CANONICAL_RATE_UNIT
+    factor = RATE_FACTORS.get(str(reported_unit).strip().lower(), 1.0)
+    out.reported_unit = reported_unit
+    out.rate_unit = CANONICAL_RATE_UNIT
+    out.rate_5s = _scale(summ.get("rate_5s") or summ.get("GHS 5s"), factor)
+    out.rate_30m = _scale(summ.get("rate_30m") or summ.get("GHS 30m"), factor)
+    out.rate_avg = _scale(summ.get("rate_avg") or summ.get("GHS av"), factor)
+    out.rate_ideal = _scale(summ.get("rate_ideal"), factor)
     elapsed = _num(summ.get("elapsed") or summ.get("Elapsed"))
     out.elapsed = int(elapsed) if elapsed is not None else None
     hw = _num(summ.get("hw_all") or summ.get("Hardware Errors"))
@@ -261,6 +287,8 @@ def _parse_stats(payload: Any, out: AsicTelemetry) -> None:
     chain_num = _num(stats.get("chain_num"))
     out.chains = int(chain_num) if chain_num is not None else len(chains)
     out.hw_error_pct = _num(stats.get("hwp_total"))
+    # Only newer firmware (L9 and friends) reports wall power.
+    out.power = _num(stats.get("power"))
     out.fan_rpm = [
         int(f) for f in (stats.get("fan") or []) if isinstance(f, (int, float))
     ]

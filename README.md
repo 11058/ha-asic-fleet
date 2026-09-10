@@ -16,7 +16,8 @@ the only reliable way to stop a machine hashing without pulling power.
 | Entity | Notes |
 |---|---|
 | `switch` Internet | off = firewall drops this miner's WAN traffic |
-| `sensor` Hashrate, Hashrate average, Efficiency | 5 s / 30 m / lifetime, % of nominal |
+| `sensor` Hashrate, Hashrate average, Efficiency | 5 s / 30 m / lifetime, % of nominal, normalised to MH/s |
+| `sensor` Power | wall watts, on firmware that reports it (L9 does, L7 does not) |
 | `sensor` Temperature max / average | hottest chip across all chains |
 | `sensor` Fan min / max | rpm |
 | `sensor` Chip health | working chips ÷ total, from the chain chip map |
@@ -26,8 +27,13 @@ the only reliable way to stop a machine hashing without pulling power.
 | `binary_sensor` Online, Problem, Overheating, Hashrate problem, Hardware problem, Block out of sync | |
 | `button` Reboot, Locate | Locate flashes the miner's LED |
 
-**Fleet-wide**: total hashrate, miners total / online / offline / blocked /
-with problems, hottest miner, unnamed miners, router reachability.
+**Fleet-wide**: total hashrate, total power, miners total / online / offline /
+blocked / with problems, hottest miner, unnamed miners, router reachability.
+
+Hashrate is normalised to **MH/s** whatever the miner reports — an L7 reports
+MH/s and an L9 reports GH/s for numbers of the same magnitude, so a fleet total
+that did not convert would be meaningless. The miner's own unit is kept as the
+`reported_unit` attribute.
 
 ## Identity: MAC first, hostname second
 
@@ -49,18 +55,29 @@ On top of that:
   the physical machine, but it is deliberately *not* the identity key: a port
   tells you where a cable goes, and says nothing useful if there is an
   unmanaged switch behind it.
-- **Naming.** Call `asic_fleet.assign_name` with the MAC to give a nameless
-  miner a permanent name and rack. Until then it shows up as `ASIC AABBCC`
-  and raises an `unnamed` info-level problem so it does not get forgotten.
+- **Naming.** A DHCP hostname is used when it is unique and not one of the
+  stock placeholders (`Antminer`, `localhost`, …). Failing that, the miner's
+  own configured hostname — which stock firmware reports over HTTP even when
+  its DHCP client never sends it — is used. Failing that too, the miner shows
+  up as `ASIC AABBCC` and raises an `unnamed` info-level problem so it does not
+  get forgotten; `asic_fleet.assign_name` gives it a permanent name and rack,
+  keyed by MAC.
 
 ## How blocking works
 
 Two RouterOS address-lists, one firewall rule:
 
 - `asic_blocked` — the IP entries the `forward` drop rule actually matches.
-- `asic_blocked_hosts` — *markers*. Address is always `0.0.0.0`; the `comment`
-  carries the miner's DHCP hostname, or `mac:<MAC>` for nameless ones. This
-  list expresses **intent** and survives DHCP lease churn.
+- `asic_blocked_hosts` — *markers*. The `comment` carries the miner's DHCP
+  hostname when that hostname matches the site's naming pattern, and
+  `mac:<MAC>` otherwise. This list expresses **intent** and survives DHCP lease
+  churn. The address is a placeholder drawn from the reserved 240.0.0.0/4
+  range — deliberately not `0.0.0.0`, which RouterOS would widen to "every
+  address" if the list were ever referenced by a filter rule.
+
+  Requiring the hostname to match the pattern is not pedantry: stock Bitmain
+  units all announce themselves as `Antminer`, and letting them share a marker
+  would mean blocking one blocks every one of them.
 
 A DHCP lease-script on the router mirrors intent into reality on every lease
 event, so a miner that renews into a new IP stays blocked. Home Assistant
