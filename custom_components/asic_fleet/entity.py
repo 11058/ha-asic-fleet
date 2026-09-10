@@ -41,8 +41,12 @@ class AsicEntity(CoordinatorEntity[FleetCoordinator]):
             model=(record.model if record else None) or "ASIC miner",
             sw_version=record.firmware if record else None,
             serial_number=record.serial if record else None,
-            suggested_area=record.rack if record and record.rack else None,
         )
+        # Deliberately no suggested_area: Home Assistant folds the area name
+        # into generated entity ids, and these miners are already named after
+        # their rack, so it would produce sensor.r1_r1_asic7_hashrate. Assign
+        # areas by hand if you want them; the rack stays available as an
+        # attribute and as a service target.
         if self.coordinator.hub_device_id:
             info["via_device_id"] = self.coordinator.hub_device_id
         return info

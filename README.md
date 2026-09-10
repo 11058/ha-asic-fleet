@@ -30,6 +30,12 @@ the only reliable way to stop a machine hashing without pulling power.
 **Fleet-wide**: total hashrate, total power, miners total / online / offline /
 blocked / with problems, hottest miner, unnamed miners, router reachability.
 
+The fleet hashrate covers only the algorithm most of the fleet is mining, with
+a full `by_algorithm` breakdown in the attributes. Hashrate does not add across
+algorithms — one SHA-256 machine at 241 TH/s would swamp fifty Scrypt machines
+at 9.5 GH/s and the total would mean nothing. Each miner's algorithm comes from
+its own firmware where it reports one, and from its model otherwise.
+
 Hashrate is normalised to **MH/s** whatever the miner reports — an L7 reports
 MH/s and an L9 reports GH/s for numbers of the same magnitude, so a fleet total
 that did not convert would be meaningless. The miner's own unit is kept as the
@@ -116,6 +122,11 @@ notifications wherever you want them, filtered by severity and rack.
 Problems must persist for *n* consecutive polls (default 3) before they are
 raised, so a single dropped packet does not page anyone at 3 a.m.
 
+The temperature defaults (88 °C warning, 95 °C critical) assume Antminer scrypt
+hardware, whose chips sit at 70-85 °C in normal operation. Check them against
+your own fleet: thresholds that fire on half your machines train people to
+ignore alerts.
+
 ## Services
 
 | Service | Does |
@@ -134,6 +145,12 @@ the integration options. The firmware's `set_miner_conf.cgi` replaces the whole
 config rather than merging, so the integration reads the current config first
 and changes only the pool block — but a bad write still lands on the miner, so
 it stays opt-in.
+
+Miner devices are deliberately left unassigned to an area — Home Assistant
+folds the area name into generated entity ids, and these miners are already
+named after their rack, so an area would produce
+`sensor.r1_r1_asic7_hashrate`. Assign areas by hand if you want them; the rack
+remains available as an attribute and as a service target.
 
 ## Install
 

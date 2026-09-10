@@ -59,6 +59,7 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
             # L7s report MH/s and L9s GH/s; everything here is normalised to
             # MH/s, so keep the raw unit visible.
             "reported_unit": r.telemetry.reported_unit,
+            "algorithm": r.algorithm,
         },
     ),
     AsicSensorDescription(
@@ -212,6 +213,28 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
 )
 
 
+def _hashrate_by_algorithm(data: FleetData) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for record in data.asics.values():
+        rate = record.telemetry.rate_5s
+        if rate:
+            totals[record.algorithm] = round(
+                totals.get(record.algorithm, 0.0) + rate, 1
+            )
+    return totals
+
+
+def _dominant_algorithm(data: FleetData) -> str | None:
+    """The algorithm most of the fleet is mining, by machine count."""
+    counts: dict[str, int] = {}
+    for record in data.asics.values():
+        if record.telemetry.rate_5s:
+            counts[record.algorithm] = counts.get(record.algorithm, 0) + 1
+    if not counts:
+        return None
+    return max(counts, key=lambda algorithm: counts[algorithm])
+
+
 def _hottest(data: FleetData) -> AsicRecord | None:
     candidates = [r for r in data.asics.values() if r.telemetry.temp_max is not None]
     if not candidates:
@@ -235,8 +258,28 @@ FLEET_SENSORS: tuple[FleetSensorDescription, ...] = (
         native_unit_of_measurement="MH/s",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
-        value_fn=lambda d: _sum(d, "rate_5s"),
-        attrs_fn=lambda d: {"ideal": _sum(d, "rate_ideal")},
+        # Only the algorithm most of the fleet is mining. Hashrate is not
+        # comparable across algorithms — one SHA-256 machine would swamp fifty
+        # Scrypt ones and the total would mean nothing. The full breakdown is
+        # in the attributes.
+        value_fn=lambda d: _hashrate_by_algorithm(d).get(_dominant_algorithm(d) or ""),
+        attrs_fn=lambda d: {
+            "algorithm": _dominant_algorithm(d),
+            "by_algorithm": _hashrate_by_algorithm(d),
+            "ideal": round(
+                sum(
+                    r.telemetry.rate_ideal or 0
+                    for r in d.asics.values()
+                    if r.algorithm == _dominant_algorithm(d)
+                ),
+                1,
+            ),
+            "excluded": sorted(
+                r.name
+                for r in d.asics.values()
+                if r.telemetry.rate_5s and r.algorithm != _dominant_algorithm(d)
+            ),
+        },
     ),
     FleetSensorDescription(
         key="fleet_power",

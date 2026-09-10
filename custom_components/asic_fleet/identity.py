@@ -118,3 +118,39 @@ def rack_from_name(name: str, pattern: re.Pattern[str]) -> str | None:
     """Best-effort rack for a miner named by its own firmware, not by DHCP."""
     rack, _ = parse_rack(pattern.match(name.strip()))
     return rack
+
+
+# Mining algorithm, needed because a fleet total may not add hashrate across
+# algorithms: an S21+ doing 241 TH/s of SHA-256 and an L9 doing 16 GH/s of
+# Scrypt are not quantities that sum to anything meaningful.
+#
+# Promminer and current stock firmware report `Algorithm` in get_system_info;
+# older stock builds (the S21+ here, for one) do not, so the model name is the
+# fallback. Best effort by design — an unrecognised model stays "unknown"
+# rather than being guessed into the wrong bucket.
+_ALGORITHM_BY_MODEL_PREFIX: tuple[tuple[str, str], ...] = (
+    ("KS", "kHeavyHash"),
+    ("KA", "Kadena"),
+    ("L", "Scrypt"),
+    ("S", "SHA-256"),
+    ("T", "SHA-256"),
+    ("D", "X11"),
+    ("E", "Ethash"),
+    ("Z", "Equihash"),
+)
+
+UNKNOWN_ALGORITHM = "unknown"
+
+
+def algorithm_for(model: str | None, reported: str | None = None) -> str:
+    """Best-effort mining algorithm for one miner."""
+    if reported and reported.strip():
+        return reported.strip()
+    if not model:
+        return UNKNOWN_ALGORITHM
+    # "Antminer L9" -> "L9", "Antminer S21+" -> "S21+"
+    token = model.strip().split()[-1].upper()
+    for prefix, algorithm in _ALGORITHM_BY_MODEL_PREFIX:
+        if token.startswith(prefix):
+            return algorithm
+    return UNKNOWN_ALGORITHM

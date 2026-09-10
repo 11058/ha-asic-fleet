@@ -42,8 +42,11 @@ DEFAULT_ROUTER_USERNAME: Final = "ha-asic"
 DEFAULT_HOSTNAME_PATTERN: Final = r"^R(?P<rack>\d+)-ASIC(?P<index>\d+)$"
 DEFAULT_BLOCKLIST: Final = "asic_blocked"
 DEFAULT_MARKER_LIST: Final = "asic_blocked_hosts"
-DEFAULT_TEMP_WARN: Final = 75
-DEFAULT_TEMP_CRIT: Final = 85
+# Antminer L7/L9 chips sit at 70-85 C in normal operation, so a 75 C warning
+# would flag most of a healthy farm. These defaults are set to catch outliers;
+# they are options, and every site should check them against its own numbers.
+DEFAULT_TEMP_WARN: Final = 88
+DEFAULT_TEMP_CRIT: Final = 95
 DEFAULT_HASHRATE_WARN_PCT: Final = 85
 DEFAULT_FAN_MIN_RPM: Final = 1000
 DEFAULT_HW_ERROR_PCT: Final = 5.0

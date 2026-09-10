@@ -132,3 +132,23 @@ class TestHelpers:
         assert identity.parse_rack(None) == (None, None)
         assert identity.rack_from_name("R2-ASIC13", PATTERN) == "R2"
         assert identity.rack_from_name("Antminer", PATTERN) is None
+
+
+class TestAlgorithm:
+    def test_reported_algorithm_wins(self) -> None:
+        assert identity.algorithm_for("Antminer L9", "Scrypt") == "Scrypt"
+
+    def test_model_fallback_when_firmware_is_silent(self) -> None:
+        # The S21+ on this site reports no Algorithm field at all.
+        assert identity.algorithm_for("Antminer S21+") == "SHA-256"
+        assert identity.algorithm_for("Antminer L7") == "Scrypt"
+        assert identity.algorithm_for("Antminer T21") == "SHA-256"
+
+    def test_two_letter_prefixes_are_not_swallowed_by_one(self) -> None:
+        assert identity.algorithm_for("Antminer KS3") == "kHeavyHash"
+        assert identity.algorithm_for("Antminer KA3") == "Kadena"
+
+    def test_unknown_model_is_not_guessed(self) -> None:
+        assert identity.algorithm_for("Whatsminer M50") == "unknown"
+        assert identity.algorithm_for(None) == "unknown"
+        assert identity.algorithm_for("") == "unknown"

@@ -60,6 +60,7 @@ from .const import (
     SEVERITY,
 )
 from .identity import (
+    algorithm_for,
     duplicate_hostnames,
     is_generic,
     marker_address,
@@ -99,6 +100,7 @@ class AsicRecord:
     model: str | None = None
     firmware: str | None = None
     serial: str | None = None
+    algorithm: str = "unknown"
 
     @property
     def online(self) -> bool:
@@ -223,6 +225,7 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
                 blocked_entry_ip is not None and blocked_entry_ip == record.ip
             )
 
+        await self._identify(records)
         await self._poll_all(records)
         self._evaluate(records)
         data.asics = records
@@ -341,6 +344,7 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
             lease_active=lease.get("status") == "bound"
             or bool(lease.get("active-address")),
             model=probe.get("minertype"),
+            algorithm=algorithm_for(probe.get("minertype"), probe.get("Algorithm")),
             # `firmware_type` is the Promminer build string (e.g.
             # Promminer_L7_7007); the filesystem version is the fallback for
             # stock firmware that omits it.
@@ -427,6 +431,42 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
                     info.get("minertype"),
                     port_by_mac.get(mac),
                 )
+
+    async def _identify(self, records: dict[str, AsicRecord]) -> None:
+        """Fetch get_system_info once per miner, for model and algorithm.
+
+        Miners found by hostname are never probed during discovery, so without
+        this their algorithm would stay unknown — and the fleet total needs it
+        to avoid adding SHA-256 hashrate to Scrypt hashrate.
+        """
+        pending = [
+            record
+            for record in records.values()
+            if record.ip and record.mac not in self._confirmed
+        ]
+        if not pending:
+            return
+
+        semaphore = asyncio.Semaphore(PROBE_CONCURRENCY)
+
+        async def identify(record: AsicRecord) -> None:
+            async with semaphore:
+                info = await self.asic.probe(record.ip or "")
+            if not info or info.get("auth_failed"):
+                return
+            self._confirmed[record.mac] = info
+            record.model = info.get("minertype") or record.model
+            record.algorithm = algorithm_for(
+                info.get("minertype"), info.get("Algorithm")
+            )
+            record.firmware = (
+                info.get("firmware_type")
+                or info.get("system_filesystem_version")
+                or record.firmware
+            )
+            record.serial = info.get("serinum") or record.serial
+
+        await asyncio.gather(*(identify(r) for r in pending))
 
     # --- polling -------------------------------------------------------------
 
