@@ -19,7 +19,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
 from .coordinator import AsicRecord, FleetCoordinator, FleetData
@@ -326,7 +326,7 @@ FLEET_SENSORS: tuple[FleetSensorDescription, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: Any,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up sensors, adding new miners as discovery finds them."""
     coordinator: FleetCoordinator = entry.runtime_data

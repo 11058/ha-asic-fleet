@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
 from .coordinator import FleetCoordinator
@@ -16,7 +16,7 @@ from .mikrotik import MikrotikError
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: Any, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: Any, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
     """Set up one switch per miner."""
     coordinator: FleetCoordinator = entry.runtime_data

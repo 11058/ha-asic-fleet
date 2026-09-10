@@ -8,7 +8,7 @@ from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .asic_api import AsicError
 from .const import CONF_ALLOW_REBOOT, DOMAIN
@@ -17,7 +17,7 @@ from .entity import AsicEntity, FleetEntity
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: Any, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: Any, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
     """Set up buttons."""
     coordinator: FleetCoordinator = entry.runtime_data

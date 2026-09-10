@@ -13,7 +13,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
     DOMAIN,
@@ -106,7 +106,7 @@ def _worst(record: AsicRecord) -> str | None:
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: Any, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: Any, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
     """Set up binary sensors."""
     coordinator: FleetCoordinator = entry.runtime_data

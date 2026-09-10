@@ -33,7 +33,7 @@ class AsicEntity(CoordinatorEntity[FleetCoordinator]):
     def device_info(self) -> DeviceInfo:
         record = self.record
         name = record.name if record else self._mac
-        return DeviceInfo(
+        info = DeviceInfo(
             identifiers={(DOMAIN, self._mac)},
             connections={(CONNECTION_NETWORK_MAC, self._mac)},
             name=name,
@@ -41,9 +41,11 @@ class AsicEntity(CoordinatorEntity[FleetCoordinator]):
             model=(record.model if record else None) or "ASIC miner",
             sw_version=record.firmware if record else None,
             serial_number=record.serial if record else None,
-            via_device=(DOMAIN, self.coordinator.entry.entry_id),
             suggested_area=record.rack if record and record.rack else None,
         )
+        if self.coordinator.hub_device_id:
+            info["via_device_id"] = self.coordinator.hub_device_id
+        return info
 
 
 class FleetEntity(CoordinatorEntity[FleetCoordinator]):

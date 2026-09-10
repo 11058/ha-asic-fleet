@@ -154,9 +154,12 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         self._last_reachable: dict[str, datetime] = {}
         self._last_ip: dict[str, str] = {}
         self._announced: set[str] = set()
+        # Set once the hub device exists; miner devices hang off it.
+        self.hub_device_id: str | None = None
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(
                 seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)

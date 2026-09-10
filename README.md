@@ -169,7 +169,7 @@ count, and whether reboot and pool writes are permitted.
 
 ## Requirements
 
-- Home Assistant 2025.2 or newer
+- Home Assistant 2026.8 or newer
 - RouterOS v7 with the REST service reachable from Home Assistant
 - Miners exposing the Antminer/Promminer CGI API over HTTP Digest
 

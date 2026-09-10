@@ -15,7 +15,18 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.helpers.service import async_extract_referenced_entity_ids
+
+try:  # HA 2025.9+
+    from homeassistant.helpers.target import (
+        TargetSelection,
+        async_extract_referenced_entity_ids,
+    )
+except ImportError:  # pragma: no cover - older cores
+    from homeassistant.helpers.service import (  # type: ignore[no-redef]
+        async_extract_referenced_entity_ids,
+    )
+
+    TargetSelection = None  # type: ignore[assignment]
 
 from .asic_api import AsicClient, AsicError
 from .const import (
@@ -118,7 +129,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: AsicFleetConfigEntry) ->
     entry.runtime_data = coordinator
 
     device_registry = dr.async_get(hass)
-    device_registry.async_get_or_create(
+    hub_device = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, entry.entry_id)},
         name="ASIC Fleet",
@@ -126,6 +137,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: AsicFleetConfigEntry) ->
         model="RouterOS",
         configuration_url=f"http://{router.host}",
     )
+    coordinator.hub_device_id = hub_device.id
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -176,7 +188,12 @@ def _targets(
     Accepts anything HA's target selector produces — entity, device or area —
     and maps back to the miner MAC through the device registry.
     """
-    referenced = async_extract_referenced_entity_ids(hass, call)
+    if TargetSelection is not None:
+        referenced = async_extract_referenced_entity_ids(
+            hass, TargetSelection(call.data)
+        )
+    else:  # pragma: no cover - older cores take the service-call form
+        referenced = async_extract_referenced_entity_ids(hass, call)
     entity_registry = er.async_get(hass)
     device_ids: set[str] = set(referenced.referenced_devices)
 
