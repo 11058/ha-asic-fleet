@@ -1,28 +1,20 @@
 block:
   target:
-    device:
-      integration: asic_fleet
     entity:
       integration: asic_fleet
 
 unblock:
   target:
-    device:
-      integration: asic_fleet
     entity:
       integration: asic_fleet
 
 reboot:
   target:
-    device:
-      integration: asic_fleet
     entity:
       integration: asic_fleet
 
 blink:
   target:
-    device:
-      integration: asic_fleet
     entity:
       integration: asic_fleet
   fields:
@@ -82,8 +74,6 @@ assign_name:
 
 set_pools:
   target:
-    device:
-      integration: asic_fleet
     entity:
       integration: asic_fleet
   fields:
