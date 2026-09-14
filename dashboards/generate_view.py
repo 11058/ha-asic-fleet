@@ -32,7 +32,9 @@ except ImportError:  # pragma: no cover
 
 DOMAIN = "asic_fleet"
 VIEW_PATH = "asic-fleet"
+# Entity-id form (r1_asic7) and display form (R1-ASIC7) of the same name.
 NAMED = re.compile(r"^r(\d+)_asic(\d+)$")
+NAMED_DISPLAY = re.compile(r"^R(\d+)-ASIC(\d+)$", re.IGNORECASE)
 
 
 # --- Home Assistant websocket ------------------------------------------------
@@ -203,11 +205,40 @@ def action_button(
     }
 
 
+def _from_slug(slug: str) -> str:
+    """Readable name for a miner we only know by its entity id."""
+    m = NAMED.match(slug)
+    return f"R{m[1]}-ASIC{m[2]}" if m else f"ASIC {slug.replace('asic_', '').upper()}"
+
+
+def index_miners(registry: list[dict]) -> dict[str, dict[str, str]]:
+    """mac -> {sensor key: entity_id}, read from unique ids.
+
+    Entity ids get renamed and miners get renamed; unique ids do not. They are
+    shaped `asic_fleet_<MAC>_<key>`, and a MAC contains no underscores, so the
+    split is unambiguous. Deriving one entity's id from another's — the obvious
+    shortcut — breaks the moment two of a miner's entities were created while
+    it had different names.
+    """
+    miners: dict[str, dict[str, str]] = {}
+    for entry in registry:
+        unique = entry.get("unique_id") or ""
+        if not unique.startswith(f"{DOMAIN}_"):
+            continue
+        mac, _, key = unique[len(DOMAIN) + 1 :].partition("_")
+        if ":" not in mac or not key:
+            continue  # fleet-level entity, keyed by config entry id
+        miners.setdefault(mac.upper(), {})[key] = entry["entity_id"]
+    return miners
+
+
 def build_view(
     entity_ids: set[str],
     rack: str = "R1",
     lang: str = "ru",
     cards: str = "bubble",
+    miners: dict[str, dict[str, str]] | None = None,
+    names: dict[str, str] | None = None,
 ) -> dict:
     t = TEXT[lang]
     slugs = sorted(
@@ -215,9 +246,32 @@ def build_view(
         for e in entity_ids
         if e.startswith("switch.") and e.endswith("_internet")
     )
+
+    # Entity ids and display names both drift as miners get renamed, so every
+    # lookup below goes through the registry map keyed by MAC instead.
+    by_slug: dict[str, dict[str, str]] = {}
+    name_by_slug: dict[str, str] = {}
+    for mac, entities in (miners or {}).items():
+        switch = entities.get("internet")
+        if not switch:
+            continue
+        slug = switch.split(".", 1)[1][: -len("_internet")]
+        by_slug[slug] = entities
+        if names and names.get(mac):
+            name_by_slug[slug] = names[mac]
+
+    def display(slug: str) -> str:
+        return name_by_slug.get(slug) or _from_slug(slug)
+
+    def _match(slug: str):
+        # A miner renamed after its entities were created keeps an entity id
+        # from its old name, so judge by what it is called now — and the two
+        # forms are spelled differently: r1_asic7 versus R1-ASIC7.
+        return NAMED_DISPLAY.match(display(slug)) or NAMED.match(slug)
+
     named = sorted(
-        (s for s in slugs if NAMED.match(s)),
-        key=lambda s: (int(NAMED.match(s)[1]), int(NAMED.match(s)[2])),
+        (s for s in slugs if _match(s)),
+        key=lambda s: (int(_match(s)[1]), int(_match(s)[2])),
     )
     unnamed = [s for s in slugs if s not in named]
     ordered = named + unnamed
@@ -225,20 +279,19 @@ def build_view(
     def has(eid: str) -> bool:
         return eid in entity_ids
 
-    def full_name(slug: str) -> str:
-        m = NAMED.match(slug)
-        return (
-            f"R{m[1]}-ASIC{m[2]}" if m else f"ASIC {slug.replace('asic_', '').upper()}"
-        )
-
     def short(slug: str) -> str:
-        m = NAMED.match(slug)
+        m = _match(slug)
         return m[2] if m else slug.replace("asic_", "").upper()
 
-    def collect(domain: str, suffix: str) -> list[str]:
-        return [
-            f"{domain}.{s}_{suffix}" for s in ordered if has(f"{domain}.{s}_{suffix}")
-        ]
+    def collect(domain: str, key: str) -> list[str]:
+        found = []
+        for slug in ordered:
+            eid = by_slug.get(slug, {}).get(key)
+            if eid and eid.startswith(f"{domain}."):
+                found.append(eid)
+            elif has(f"{domain}.{slug}_{key}"):
+                found.append(f"{domain}.{slug}_{key}")
+        return found
 
     summary = [heading(t["fleet"], "title", "mdi:server-network")]
     for suffix, name, color in (
@@ -274,13 +327,19 @@ def build_view(
         ),
         entity_filter(
             t["hot"],
-            collect("sensor", "temperature_max"),
-            [{"condition": "numeric_state", "above": 88}],
+            collect("sensor", "temperature_status"),
+            [{"condition": "state", "state": ["warning", "critical"]}],
             "mdi:thermometer-alert",
         ),
         entity_filter(
+            t["not_hashing"],
+            collect("sensor", "hashrate_status"),
+            [{"condition": "state", "state": ["off", "error", "low"]}],
+            "mdi:speedometer-slow",
+        ),
+        entity_filter(
             t["desync"],
-            collect("binary_sensor", "block_out_of_sync"),
+            collect("binary_sensor", "block_desync"),
             [{"condition": "state", "state": "on"}],
             "mdi:shield-alert",
         ),
@@ -320,18 +379,20 @@ def build_view(
         ),
     ]
 
-    def cells(suffix: str, status_suffix: str) -> list[tuple[str, str, str]]:
-        return [
-            (f"sensor.{s}_{suffix}", f"sensor.{s}_{status_suffix}", short(s))
-            for s in ordered
-            if has(f"sensor.{s}_{suffix}")
-        ]
+    def cells(key: str, status_key: str) -> list[tuple[str, str, str]]:
+        out: list[tuple[str, str, str]] = []
+        for slug in ordered:
+            entities = by_slug.get(slug, {})
+            value, status = entities.get(key), entities.get(status_key)
+            if value and status:
+                out.append((value, status, short(slug)))
+        return out
 
     readouts = readout_grid(
         cells("hashrate", "hashrate_status"), HASHRATE_COLORS, t["hashrate_mhs"], cards
     )
     temperatures = readout_grid(
-        cells("temperature_max", "temperature_status"),
+        cells("temp_max", "temperature_status"),
         TEMPERATURE_COLORS,
         t["temp_c"],
         cards,
@@ -341,8 +402,8 @@ def build_view(
     switches += [
         {
             "type": "tile",
-            "entity": f"switch.{s}_internet",
-            "name": full_name(s),
+            "entity": by_slug.get(s, {}).get("internet", f"switch.{s}_internet"),
+            "name": display(s),
             "grid_options": {"columns": 6, "rows": 1},
             # Tapping the card opens details; only the icon toggles, so a
             # mis-tap on a phone cannot silently stop a miner.
@@ -367,19 +428,22 @@ def build_view(
             cards.append(
                 {
                     "type": "entities",
-                    "title": full_name(s),
+                    "title": display(s),
                     "state_color": True,
                     "entities": [
                         e
                         for e in (
-                            f"switch.{s}_internet",
-                            f"sensor.{s}_ip_address",
-                            f"sensor.{s}_switch_port",
-                            f"sensor.{s}_status",
-                            f"sensor.{s}_hashrate",
-                            f"sensor.{s}_temperature_max",
+                            by_slug.get(s, {}).get(key)
+                            for key in (
+                                "internet",
+                                "ip_address",
+                                "switch_port",
+                                "status",
+                                "hashrate",
+                                "temp_max",
+                            )
                         )
-                        if has(e)
+                        if e
                     ],
                 }
             )
@@ -494,10 +558,29 @@ async def main() -> None:
         if not entry_ids:
             sys.exit(f"no {DOMAIN} config entry found")
         registry = await client.call({"type": "config/entity_registry/list"})
-        entity_ids = {
-            e["entity_id"] for e in registry if e.get("config_entry_id") in entry_ids
+        mine = [e for e in registry if e.get("config_entry_id") in entry_ids]
+        entity_ids = {e["entity_id"] for e in mine}
+        miners = index_miners(mine)
+
+        devices = await client.call({"type": "config/device_registry/list"})
+        device_name = {
+            d["id"]: (d.get("name_by_user") or d.get("name") or "") for d in devices
         }
-        view = build_view(entity_ids, rack=args.rack, lang=args.lang, cards=args.cards)
+        names: dict[str, str] = {}
+        for entry in mine:
+            unique = entry.get("unique_id") or ""
+            mac, _, _key = unique[len(DOMAIN) + 1 :].partition("_")
+            if ":" in mac and entry.get("device_id"):
+                names.setdefault(mac.upper(), device_name.get(entry["device_id"], ""))
+
+        view = build_view(
+            entity_ids,
+            rack=args.rack,
+            lang=args.lang,
+            cards=args.cards,
+            miners=miners,
+            names=names,
+        )
 
         if not args.dashboard:
             print(json.dumps(view, ensure_ascii=False, indent=2))
