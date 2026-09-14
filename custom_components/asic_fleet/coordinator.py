@@ -878,7 +878,10 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         self._last_ip.pop(mac, None)
         self._active_problems.pop(mac, None)
         self._announced.discard(mac)
-        await self.async_refresh()
+        # Removing the device orphans its entities, and the platforms only add
+        # entities for miners they have not seen before — so without a reload
+        # a miner that comes back would have no entities at all.
+        self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
         return removed
 
     async def async_reset(self, *, keep_manual: bool = True) -> int:
@@ -905,7 +908,9 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         self._last_ip.clear()
         self._active_problems.clear()
         self._announced.clear()
-        await self.async_refresh()
+        # Same reason as in async_forget: the devices are gone, so the entities
+        # have to be built again from scratch.
+        self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
         return removed
 
     async def async_blink(self, record: AsicRecord, on: bool = True) -> None:
