@@ -83,3 +83,42 @@ set_pools:
         object:
 
 refresh:
+
+discover:
+
+add_device:
+  fields:
+    mac:
+      required: true
+      example: "B4:2E:99:AA:BB:CC"
+      selector:
+        text:
+    ip:
+      example: "10.100.39.42"
+      selector:
+        text:
+    name:
+      example: R1-ASIC57
+      selector:
+        text:
+    rack:
+      example: R1
+      selector:
+        text:
+
+forget_device:
+  target:
+    entity:
+      integration: asic_fleet
+  fields:
+    mac:
+      example: "B4:2E:99:AA:BB:CC"
+      selector:
+        text:
+
+reset:
+  fields:
+    keep_manual:
+      default: true
+      selector:
+        boolean:

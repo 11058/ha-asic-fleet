@@ -39,9 +39,22 @@ EOF
 | Fleet | hashrate, power, online / blocked / offline / problem counts, hottest miner, router reachability |
 | Needs attention | four filtered lists — offline, active problems, above 88 °C, block not applied — each hidden when empty |
 | Rack control | block, unblock and staggered reboot for the whole rack, each behind a confirmation, plus a manual refresh |
-| Hashrate and temperature | every miner's number in a compact grid |
+| Hashrate | every miner's number, eight to a row, tinted by status |
+| Temperature | the same, tinted normal / warning / critical |
 | Internet per miner | one tile per machine; the icon toggles, the card opens details |
 | Unnamed | miners with no name yet, with the IP, switch port and MAC needed to identify them |
+
+## Colour and layout
+
+Readouts are laid out **eight to a row**, matching a shelf, so the grid maps
+onto what you see walking down the aisle.
+
+Colouring a cell by a numeric threshold is beyond what built-in cards can do —
+they colour on/off states, not ranges. The integration therefore exposes the
+judgement itself as `sensor.<miner>_hashrate_status` and
+`sensor.<miner>_temperature_status`, and the generator tints each cell from
+those. Rendering uses `custom:bubble-card` (HACS); pass `--cards stock` for a
+built-in-only version that keeps the layout but drops the colour.
 
 ## Layout
 

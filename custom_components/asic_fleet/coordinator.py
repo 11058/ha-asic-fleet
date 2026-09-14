@@ -11,6 +11,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -70,6 +71,8 @@ from .identity import (
     resolve_name,
 )
 from .mikrotik import MikrotikAuthError, MikrotikClient, MikrotikError
+from .power import estimate_power
+from .store import MinerStore, StoredMiner
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,10 +104,65 @@ class AsicRecord:
     firmware: str | None = None
     serial: str | None = None
     algorithm: str = "unknown"
+    # Present in the inventory but not in any current DHCP lease.
+    stale_lease: bool = False
+    manual: bool = False
+    # Filled in during evaluation, where the thresholds live.
+    temp_status: str = "unknown"
 
     @property
     def online(self) -> bool:
         return self.telemetry.reachable
+
+    @property
+    def error(self) -> str | None:
+        """Human-readable reason this miner is not reporting, if any."""
+        if self.telemetry.error:
+            return self.telemetry.error
+        if not self.ip:
+            return "нет адреса: майнер не появлялся в DHCP и не задан вручную"
+        if not self.online:
+            return f"нет ответа от {self.ip}"
+        return None
+
+    @property
+    def power(self) -> float | None:
+        """Wall power: measured where the firmware reports it, else estimated."""
+        if self.telemetry.power is not None:
+            return self.telemetry.power
+        return estimate_power(self.model, self.telemetry)
+
+    @property
+    def power_is_measured(self) -> bool:
+        return self.telemetry.power is not None
+
+    @property
+    def hashrate_status(self) -> str:
+        """Coarse state of this miner's hashing, for colouring and automations."""
+        if self.blocked:
+            return "blocked"
+        if not self.online:
+            return "unreachable"
+        if self.telemetry.error:
+            return "error"
+        rate = self.telemetry.rate_5s
+        if rate is None:
+            return "error"
+        if rate <= 0:
+            return "off"
+        if self.telemetry.efficiency is not None and self.telemetry.efficiency < 0.85:
+            return "low"
+        return "ok"
+
+    def temperature_status(self, warn: float, crit: float) -> str:
+        temp = self.telemetry.temp_max
+        if temp is None:
+            return "unknown"
+        if temp >= crit:
+            return "critical"
+        if temp >= warn:
+            return "warning"
+        return "ok"
 
     @property
     def status(self) -> str:
@@ -132,6 +190,11 @@ class FleetData:
     unknown_leases: list[dict[str, Any]] = field(default_factory=list)
 
     @property
+    def errors(self) -> dict[str, str]:
+        """name -> concrete reason, for every miner currently in trouble."""
+        return {r.name: r.error for r in self.asics.values() if r.error}
+
+    @property
     def racks(self) -> set[str]:
         return {a.rack for a in self.asics.values() if a.rack}
 
@@ -145,12 +208,18 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         entry: ConfigEntry,
         router: MikrotikClient,
         asic: AsicClient,
+        store: MinerStore,
     ) -> None:
         self.entry = entry
         self.router = router
         self.asic = asic
+        self.store = store
         self._probe_skip: dict[str, int] = {}
-        self._confirmed: dict[str, dict[str, Any]] = {}
+        # Mirror of the persisted probe payloads, so an offline miner is still
+        # identified after a restart instead of having to answer first.
+        self._confirmed: dict[str, dict[str, Any]] = {
+            mac: miner.probe for mac, miner in store.miners.items() if miner.probe
+        }
         self._fail_counts: dict[tuple[str, str], int] = {}
         self._active_problems: dict[str, dict[str, str]] = {}
         self._last_reachable: dict[str, datetime] = {}
@@ -228,6 +297,7 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         await self._identify(records)
         await self._poll_all(records)
         self._evaluate(records)
+        self._persist(records)
         data.asics = records
         return data
 
@@ -254,26 +324,57 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         port_by_mac: dict[str, str],
         data: FleetData,
     ) -> dict[str, AsicRecord]:
+        """Build this cycle's records from the inventory plus current leases.
+
+        Miners already in the inventory are always present, lease or no lease.
+        A machine that is switched off long enough for its lease to expire must
+        not disappear from Home Assistant — it is still a machine in a rack,
+        and losing it would take its name, history and entities with it.
+        """
         pattern = re.compile(self._opt(CONF_HOSTNAME_PATTERN, DEFAULT_HOSTNAME_PATTERN))
         aliases = self.aliases
         records: dict[str, AsicRecord] = {}
         candidates: list[tuple[str, str, dict[str, Any]]] = []
+
+        lease_by_mac: dict[str, tuple[str, dict[str, Any]]] = {}
+        for lease in leases:
+            mac = _norm_mac(lease.get("mac-address", ""))
+            ip = lease.get("active-address") or lease.get("address")
+            if mac and ip:
+                lease_by_mac[mac] = (ip, lease)
 
         # Stock firmware hands out "Antminer" as the DHCP hostname, so several
         # machines can claim the same one. Knowing which names are contested is
         # a precondition for naming anything.
         collisions = duplicate_hostnames(lease.get("host-name") for lease in leases)
 
-        for lease in leases:
-            mac = _norm_mac(lease.get("mac-address", ""))
-            ip = lease.get("active-address") or lease.get("address")
-            if not mac or not ip:
+        # 1. Everything already known.
+        for mac, stored in self.store.miners.items():
+            ip, lease = lease_by_mac.get(mac, (stored.ip, {}))
+            hostname = (lease.get("host-name") or stored.lease_hostname or "").strip()
+            records[mac] = self._build_record(
+                mac,
+                ip,
+                hostname,
+                pattern.match(hostname) if hostname else None,
+                aliases.get(mac),
+                port_by_mac.get(mac) or stored.port,
+                lease,
+                pattern,
+                hostname.lower() in collisions,
+                stored=stored,
+                stale_lease=mac not in lease_by_mac,
+            )
+
+        # 2. Leases that are new to us.
+        for mac, (ip, lease) in lease_by_mac.items():
+            if mac in records:
                 continue
             hostname = (lease.get("host-name") or "").strip()
             match = pattern.match(hostname) if hostname else None
             alias = aliases.get(mac)
 
-            if match or alias or mac in self._confirmed:
+            if match or alias:
                 records[mac] = self._build_record(
                     mac,
                     ip,
@@ -297,12 +398,36 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
                 candidates, port_by_mac, records, data, pattern, collisions
             )
 
+        self._persist(records)
         return records
+
+    def _persist(self, records: dict[str, AsicRecord]) -> None:
+        """Fold this cycle's findings back into the inventory."""
+        for record in records.values():
+            self.store.upsert(
+                StoredMiner(
+                    mac=record.mac,
+                    name=record.name if record.named else "",
+                    rack=record.rack,
+                    index=record.index,
+                    marker=record.marker,
+                    lease_hostname=record.lease_hostname,
+                    ip=record.ip,
+                    port=record.port,
+                    model=record.model,
+                    firmware=record.firmware,
+                    serial=record.serial,
+                    algorithm=record.algorithm,
+                    named=record.named,
+                    manual=record.manual,
+                    probe=self._confirmed.get(record.mac, {}),
+                )
+            )
 
     def _build_record(
         self,
         mac: str,
-        ip: str,
+        ip: str | None,
         lease_hostname: str,
         match: re.Match[str] | None,
         alias: dict[str, Any] | None,
@@ -310,8 +435,10 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         lease: dict[str, Any],
         pattern: re.Pattern[str],
         hostname_is_duplicate: bool = False,
+        stored: StoredMiner | None = None,
+        stale_lease: bool = False,
     ) -> AsicRecord:
-        probe = self._confirmed.get(mac, {})
+        probe = self._confirmed.get(mac) or (stored.probe if stored else {})
         rack, index = parse_rack(match)
 
         probe_hostname = str(probe.get("hostname") or "").strip()
@@ -322,14 +449,28 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
             probe_hostname=probe_hostname,
             hostname_is_duplicate=hostname_is_duplicate,
         )
+        # A name we already settled on outlives a lease going away: without
+        # this, a miner that is merely switched off would revert to
+        # "ASIC A1B2C3" and lose the name someone gave it.
+        if not named and stored and stored.named and stored.name:
+            name, named = stored.name, True
 
         if rack is None and named and not is_generic(name):
             # A miner named by its own firmware still belongs to a rack.
             rack = rack_from_name(name, pattern)
+        if rack is None and stored:
+            rack = stored.rack
+        if index is None and stored:
+            index = stored.index
         if alias and alias.get("rack"):
             rack = str(alias["rack"])
 
         marker = resolve_marker(mac, lease_hostname, match is not None)
+        if stale_lease and stored and stored.marker:
+            # Keep addressing the firewall by whatever comment this miner was
+            # blocked under; recomputing it from a vanished lease would leave
+            # a stale block nobody can lift.
+            marker = stored.marker
 
         return AsicRecord(
             mac=mac,
@@ -338,19 +479,33 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
             ip=ip,
             rack=rack,
             index=index,
-            lease_hostname=lease_hostname or None,
+            lease_hostname=lease_hostname
+            or (stored.lease_hostname if stored else None),
             port=port,
             named=named,
+            stale_lease=stale_lease,
+            manual=bool(stored and stored.manual),
             lease_active=lease.get("status") == "bound"
             or bool(lease.get("active-address")),
-            model=probe.get("minertype"),
-            algorithm=algorithm_for(probe.get("minertype"), probe.get("Algorithm")),
+            model=probe.get("minertype") or (stored.model if stored else None),
+            algorithm=algorithm_for(
+                probe.get("minertype") or (stored.model if stored else None),
+                probe.get("Algorithm")
+                or (
+                    stored.algorithm
+                    if stored and stored.algorithm != "unknown"
+                    else None
+                ),
+            ),
             # `firmware_type` is the Promminer build string (e.g.
             # Promminer_L7_7007); the filesystem version is the fallback for
             # stock firmware that omits it.
             firmware=probe.get("firmware_type")
-            or probe.get("system_filesystem_version"),
-            serial=probe.get("serinum") or probe.get("serial"),
+            or probe.get("system_filesystem_version")
+            or (stored.firmware if stored else None),
+            serial=probe.get("serinum")
+            or probe.get("serial")
+            or (stored.serial if stored else None),
         )
 
     async def _probe_candidates(
@@ -511,6 +666,7 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         for record in records.values():
             raised: dict[str, Any] = {}
             tel = record.telemetry
+            record.temp_status = record.temperature_status(temp_warn, temp_crit)
 
             if not record.online:
                 # A miner we deliberately blocked stays reachable on the LAN, so
@@ -666,6 +822,88 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         if not record.ip:
             raise AsicError(f"{record.name}: no IP known, cannot reboot")
         await self.asic.reboot(record.ip)
+
+    # --- inventory management ------------------------------------------------
+
+    async def async_discover_now(self) -> None:
+        """Re-probe everything, including leases previously judged uninteresting."""
+        self._probe_skip.clear()
+        await self.async_refresh()
+
+    async def async_add_manual(
+        self,
+        mac: str,
+        *,
+        ip: str | None = None,
+        name: str | None = None,
+        rack: str | None = None,
+    ) -> StoredMiner:
+        """Add a miner by hand, for machines discovery cannot reach.
+
+        Useful for a static-IP miner on a segment with no DHCP, or one that is
+        currently powered down but should still appear in the fleet.
+        """
+        mac = _norm_mac(mac)
+        miner = StoredMiner(
+            mac=mac,
+            name=name or "",
+            rack=rack,
+            ip=ip,
+            named=bool(name),
+            manual=True,
+            marker=f"mac:{mac}",
+        )
+        stored = self.store.upsert(miner)
+        await self.store.async_save_now()
+        await self.async_refresh()
+        return stored
+
+    async def async_forget(self, mac: str) -> bool:
+        """Drop a miner from the inventory and remove its device."""
+        mac = _norm_mac(mac)
+        removed = self.store.forget(mac)
+        await self.store.async_save_now()
+
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, mac)})
+        if device:
+            registry.async_remove_device(device.id)
+
+        self._confirmed.pop(mac, None)
+        self._probe_skip.pop(mac, None)
+        self._last_reachable.pop(mac, None)
+        self._last_ip.pop(mac, None)
+        self._active_problems.pop(mac, None)
+        self._announced.discard(mac)
+        await self.async_refresh()
+        return removed
+
+    async def async_reset(self, *, keep_manual: bool = True) -> int:
+        """Forget every discovered miner and start discovery over.
+
+        Hand-added miners are kept by default — they cannot be rediscovered
+        from the network, so dropping them would be irreversible.
+        """
+        registry = dr.async_get(self.hass)
+        for mac, miner in list(self.store.miners.items()):
+            if keep_manual and miner.manual:
+                continue
+            device = registry.async_get_device(identifiers={(DOMAIN, mac)})
+            if device:
+                registry.async_remove_device(device.id)
+
+        removed = self.store.clear(keep_manual=keep_manual)
+        await self.store.async_save_now()
+        self._confirmed = {
+            mac: m.probe for mac, m in self.store.miners.items() if m.probe
+        }
+        self._probe_skip.clear()
+        self._last_reachable.clear()
+        self._last_ip.clear()
+        self._active_problems.clear()
+        self._announced.clear()
+        await self.async_refresh()
+        return removed
 
     async def async_blink(self, record: AsicRecord, on: bool = True) -> None:
         if not record.ip:

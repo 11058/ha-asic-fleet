@@ -21,7 +21,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up buttons."""
     coordinator: FleetCoordinator = entry.runtime_data
-    async_add_entities([RefreshButton(coordinator)])
+    async_add_entities(
+        [
+            RefreshButton(coordinator),
+            DiscoverButton(coordinator),
+            ResetButton(coordinator),
+        ]
+    )
 
     known: set[str] = set()
 
@@ -100,3 +106,37 @@ class RefreshButton(FleetEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.coordinator.async_refresh()
+
+
+class DiscoverButton(FleetEntity, ButtonEntity):
+    """Re-scan the network, including leases previously judged uninteresting."""
+
+    _attr_translation_key = "discover"
+    _attr_icon = "mdi:radar"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: FleetCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.entry.entry_id}_discover"
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_discover_now()
+
+
+class ResetButton(FleetEntity, ButtonEntity):
+    """Forget every discovered miner and start over.
+
+    Hand-added miners survive: they cannot be rediscovered from the network,
+    so dropping them would be a one-way door.
+    """
+
+    _attr_translation_key = "reset"
+    _attr_icon = "mdi:delete-sweep"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: FleetCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.entry.entry_id}_reset"
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_reset(keep_manual=True)

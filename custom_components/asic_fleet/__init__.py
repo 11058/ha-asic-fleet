@@ -43,19 +43,24 @@ from .const import (
     CONF_ROUTER_VERIFY_SSL,
     DEFAULT_ASIC_PORT,
     DOMAIN,
+    SERVICE_ADD_DEVICE,
     SERVICE_ASSIGN_NAME,
     SERVICE_BLINK,
     SERVICE_BLOCK,
     SERVICE_BLOCK_RACK,
+    SERVICE_DISCOVER,
+    SERVICE_FORGET_DEVICE,
     SERVICE_REBOOT,
     SERVICE_REBOOT_RACK,
     SERVICE_REFRESH,
+    SERVICE_RESET,
     SERVICE_SET_POOLS,
     SERVICE_UNBLOCK,
     SERVICE_UNBLOCK_RACK,
 )
 from .coordinator import AsicRecord, FleetCoordinator
 from .mikrotik import MikrotikClient, MikrotikError
+from .store import MinerStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,6 +89,26 @@ ASSIGN_NAME_SCHEMA = vol.Schema(
         vol.Optional("rack"): cv.string,
     }
 )
+
+ADD_DEVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required("mac"): cv.string,
+        vol.Optional("ip"): cv.string,
+        vol.Optional("name"): cv.string,
+        vol.Optional("rack"): cv.string,
+    }
+)
+
+FORGET_DEVICE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("mac"): cv.string,
+        vol.Optional("device_id"): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional("entity_id"): cv.entity_ids,
+        vol.Optional("area_id"): vol.All(cv.ensure_list, [cv.string]),
+    }
+)
+
+RESET_SCHEMA = vol.Schema({vol.Optional("keep_manual", default=True): cv.boolean})
 
 SET_POOLS_SCHEMA = vol.Schema(
     {
@@ -124,7 +149,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: AsicFleetConfigEntry) ->
         entry.data.get(CONF_ASIC_PORT, DEFAULT_ASIC_PORT),
     )
 
-    coordinator = FleetCoordinator(hass, entry, router, asic)
+    store = MinerStore(hass, entry.entry_id)
+    await store.async_load()
+
+    coordinator = FleetCoordinator(hass, entry, router, asic, store)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
@@ -160,6 +188,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: AsicFleetConfigEntry) -
             SERVICE_ASSIGN_NAME,
             SERVICE_SET_POOLS,
             SERVICE_REFRESH,
+            SERVICE_DISCOVER,
+            SERVICE_ADD_DEVICE,
+            SERVICE_FORGET_DEVICE,
+            SERVICE_RESET,
         ):
             hass.services.async_remove(DOMAIN, service)
     return unloaded
@@ -322,6 +354,45 @@ def _async_register_services(hass: HomeAssistant) -> None:
         for coordinator in _coordinators(hass):
             await coordinator.async_request_refresh()
 
+    async def handle_discover(call: ServiceCall) -> None:
+        for coordinator in _coordinators(hass):
+            await coordinator.async_discover_now()
+
+    async def handle_add_device(call: ServiceCall) -> None:
+        coordinators = _coordinators(hass)
+        if not coordinators:
+            raise ServiceValidationError("ASIC Fleet is not set up")
+        added = await coordinators[0].async_add_manual(
+            call.data["mac"],
+            ip=call.data.get("ip"),
+            name=call.data.get("name"),
+            rack=call.data.get("rack"),
+        )
+        _LOGGER.info("Added miner %s by hand (%s)", added.mac, added.name or "unnamed")
+
+    async def handle_forget_device(call: ServiceCall) -> None:
+        macs: set[str] = set()
+        if call.data.get("mac"):
+            macs.add(str(call.data["mac"]))
+        if any(call.data.get(k) for k in ("device_id", "entity_id", "area_id")):
+            macs.update(record.mac for _, record in _targets(hass, call))
+        if not macs:
+            raise ServiceValidationError(
+                "Target a miner device, or pass its MAC address."
+            )
+        for coordinator in _coordinators(hass):
+            for mac in macs:
+                await coordinator.async_forget(mac)
+
+    async def handle_reset(call: ServiceCall) -> None:
+        keep_manual = bool(call.data.get("keep_manual", True))
+        for coordinator in _coordinators(hass):
+            removed = await coordinator.async_reset(keep_manual=keep_manual)
+            _LOGGER.warning(
+                "ASIC Fleet inventory reset: %d miners dropped, rediscovering",
+                removed,
+            )
+
     hass.services.async_register(DOMAIN, SERVICE_BLOCK, handle_block)
     hass.services.async_register(DOMAIN, SERVICE_UNBLOCK, handle_unblock)
     hass.services.async_register(DOMAIN, SERVICE_REBOOT, handle_reboot)
@@ -342,6 +413,14 @@ def _async_register_services(hass: HomeAssistant) -> None:
         DOMAIN, SERVICE_SET_POOLS, handle_set_pools, SET_POOLS_SCHEMA
     )
     hass.services.async_register(DOMAIN, SERVICE_REFRESH, handle_refresh)
+    hass.services.async_register(DOMAIN, SERVICE_DISCOVER, handle_discover)
+    hass.services.async_register(
+        DOMAIN, SERVICE_ADD_DEVICE, handle_add_device, ADD_DEVICE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_FORGET_DEVICE, handle_forget_device, FORGET_DEVICE_SCHEMA
+    )
+    hass.services.async_register(DOMAIN, SERVICE_RESET, handle_reset, RESET_SCHEMA)
 
 
 def _assert_reboot_allowed(coordinator: FleetCoordinator) -> None:

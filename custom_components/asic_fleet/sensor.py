@@ -127,7 +127,38 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
-        value_fn=lambda r: r.telemetry.power,
+        value_fn=lambda r: r.power,
+        attrs_fn=lambda r: {
+            # Promminer never reports power, so most of a mixed fleet is
+            # estimated from the model's nominal draw and how hard it is
+            # hashing. Say which is which rather than pretending to measure.
+            "source": "measured" if r.power_is_measured else "estimated",
+            "model": r.model,
+        },
+    ),
+    AsicSensorDescription(
+        key="hashrate_status",
+        translation_key="hashrate_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["ok", "low", "off", "blocked", "unreachable", "error"],
+        value_fn=lambda r: r.hashrate_status,
+        attrs_fn=lambda r: {
+            "rate_5s": r.telemetry.rate_5s,
+            "rate_ideal": r.telemetry.rate_ideal,
+            "error": r.error,
+            "ip": r.ip,
+        },
+    ),
+    AsicSensorDescription(
+        key="temperature_status",
+        translation_key="temperature_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["ok", "warning", "critical", "unknown"],
+        value_fn=lambda r: r.temp_status,
+        attrs_fn=lambda r: {
+            "temp_max": r.telemetry.temp_max,
+            "temp_avg": r.telemetry.temp_avg,
+        },
     ),
     AsicSensorDescription(
         key="chip_health",
@@ -171,7 +202,12 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=["online", "offline", "blocked", "degraded", "critical"],
         value_fn=lambda r: r.status,
-        attrs_fn=lambda r: {"problems": sorted(r.problems)},
+        attrs_fn=lambda r: {
+            "problems": sorted(r.problems),
+            "error": r.error,
+            "stale_lease": r.stale_lease,
+            "manual": r.manual,
+        },
     ),
     AsicSensorDescription(
         key="ip_address",
@@ -182,6 +218,9 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
             "mac": r.mac,
             "dhcp_hostname": r.lease_hostname,
             "marker": r.marker,
+            # True when this address is remembered from the inventory because
+            # the miner currently holds no DHCP lease.
+            "stale_lease": r.stale_lease,
         },
     ),
     AsicSensorDescription(
@@ -288,13 +327,20 @@ FLEET_SENSORS: tuple[FleetSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
-        value_fn=lambda d: _sum(d, "power") or None,
+        value_fn=lambda d: (
+            round(sum(r.power for r in d.asics.values() if r.power is not None), 1)
+            or None
+        ),
         attrs_fn=lambda d: {
-            # Only newer firmware reports power, so say how much of the fleet
-            # this number actually covers.
-            "reporting": sum(
-                1 for r in d.asics.values() if r.telemetry.power is not None
+            "measured": sum(1 for r in d.asics.values() if r.power_is_measured),
+            "estimated": sum(
+                1
+                for r in d.asics.values()
+                if r.power is not None and not r.power_is_measured
             ),
+            # Miners of an unrecognised model contribute nothing, so the total
+            # is a floor, not a guess.
+            "unaccounted": sum(1 for r in d.asics.values() if r.power is None),
             "of": len(d.asics),
         },
     ),
@@ -339,6 +385,13 @@ FLEET_SENSORS: tuple[FleetSensorDescription, ...] = (
                 r.name: sorted(r.problems) for r in d.asics.values() if r.problems
             }
         },
+    ),
+    FleetSensorDescription(
+        key="miners_with_errors",
+        translation_key="miners_with_errors",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda d: len(d.errors),
+        attrs_fn=lambda d: {"detail": d.errors},
     ),
     FleetSensorDescription(
         key="fleet_temp_max",

@@ -17,7 +17,9 @@ the only reliable way to stop a machine hashing without pulling power.
 |---|---|
 | `switch` Internet | off = firewall drops this miner's WAN traffic |
 | `sensor` Hashrate, Hashrate average, Efficiency | 5 s / 30 m / lifetime, % of nominal, normalised to MH/s |
-| `sensor` Power | wall watts, on firmware that reports it (L9 does, L7 does not) |
+| `sensor` Power | wall watts — measured where the firmware reports it, estimated from the model otherwise |
+| `sensor` Hashrate status | ok / low / off / blocked / unreachable / error |
+| `sensor` Temperature status | ok / warning / critical |
 | `sensor` Temperature max / average | hottest chip across all chains |
 | `sensor` Fan min / max | rpm |
 | `sensor` Chip health | working chips ÷ total, from the chain chip map |
@@ -36,10 +38,36 @@ algorithms — one SHA-256 machine at 241 TH/s would swamp fifty Scrypt machines
 at 9.5 GH/s and the total would mean nothing. Each miner's algorithm comes from
 its own firmware where it reports one, and from its model otherwise.
 
+Power is measured where the firmware reports it and estimated otherwise, from
+the model's nominal draw scaled by how hard the machine is hashing — Promminer
+never reports power, so a total built on measurements alone showed 20 kW for a
+farm drawing nearer 200 kW. Every power figure says which it is, and miners of
+an unrecognised model are counted as unaccounted rather than guessed at.
+
 Hashrate is normalised to **MH/s** whatever the miner reports — an L7 reports
 MH/s and an L9 reports GH/s for numbers of the same magnitude, so a fleet total
 that did not convert would be meaningless. The miner's own unit is kept as the
 `reported_unit` attribute.
+
+## The inventory outlives the network
+
+Miners are remembered on disk, not rebuilt from the router's lease table every
+time. Switch a machine off long enough for its DHCP lease to expire, restart
+Home Assistant, and it is still there — with its name, its rack, its history
+and its entities — marked as having no current lease rather than silently
+vanishing. The same store keeps each miner's identification, so a machine that
+is offline at startup does not have to answer before it can be recognised.
+
+Managing that inventory:
+
+| | |
+|---|---|
+| `asic_fleet.discover` | re-scan now, including leases previously judged uninteresting |
+| `asic_fleet.add_device` | add a miner by hand — static IP, or one that is currently powered down |
+| `asic_fleet.forget_device` | remove a miner and delete its device |
+| `asic_fleet.reset` | forget everything discovered and start over; hand-added miners are kept |
+
+The first and last are also buttons on the fleet device.
 
 ## Identity: MAC first, hostname second
 

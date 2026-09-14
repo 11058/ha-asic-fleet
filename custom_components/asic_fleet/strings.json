@@ -141,6 +141,29 @@
       },
       "fleet_power": {
         "name": "Fleet power"
+      },
+      "hashrate_status": {
+        "name": "Hashrate status",
+        "state": {
+          "ok": "Normal",
+          "low": "Low",
+          "off": "Not hashing",
+          "blocked": "Blocked",
+          "unreachable": "Unreachable",
+          "error": "Error"
+        }
+      },
+      "temperature_status": {
+        "name": "Temperature status",
+        "state": {
+          "ok": "Normal",
+          "warning": "Warning",
+          "critical": "Critical",
+          "unknown": "Unknown"
+        }
+      },
+      "miners_with_errors": {
+        "name": "Miners with errors"
       }
     },
     "binary_sensor": {
@@ -183,6 +206,12 @@
       },
       "refresh": {
         "name": "Refresh fleet"
+      },
+      "discover": {
+        "name": "Find miners"
+      },
+      "reset": {
+        "name": "Reset inventory"
       }
     }
   },
@@ -274,6 +303,52 @@
     "refresh": {
       "name": "Refresh",
       "description": "Poll the router and every miner immediately."
+    },
+    "discover": {
+      "name": "Find miners",
+      "description": "Re-scan the network now, including leases previously judged uninteresting."
+    },
+    "add_device": {
+      "name": "Add miner",
+      "description": "Add a miner by hand, for a machine discovery cannot reach.",
+      "fields": {
+        "mac": {
+          "name": "MAC",
+          "description": "MAC address of the miner."
+        },
+        "ip": {
+          "name": "IP",
+          "description": "Static address, if it has one."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name to display."
+        },
+        "rack": {
+          "name": "Rack",
+          "description": "Rack this miner belongs to."
+        }
+      }
+    },
+    "forget_device": {
+      "name": "Forget miner",
+      "description": "Remove a miner from the inventory and delete its device.",
+      "fields": {
+        "mac": {
+          "name": "MAC",
+          "description": "MAC address, if you are not targeting a device."
+        }
+      }
+    },
+    "reset": {
+      "name": "Reset inventory",
+      "description": "Forget every discovered miner and start discovery over.",
+      "fields": {
+        "keep_manual": {
+          "name": "Keep hand-added",
+          "description": "Hand-added miners cannot be rediscovered, so they are kept by default."
+        }
+      }
     }
   }
 }

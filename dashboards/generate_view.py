@@ -76,6 +76,87 @@ class Client:
 # --- view ---------------------------------------------------------------------
 
 
+# Status -> colour. Deliberately readable in both HA themes: these are the
+# Material palette's 700 shades, which keep white text legible.
+HASHRATE_COLORS = {
+    "ok": "#2e7d32",
+    "low": "#f9a825",
+    "off": "#5d4037",
+    "blocked": "#1565c0",
+    "unreachable": "#546e7a",
+    "error": "#c62828",
+}
+TEMPERATURE_COLORS = {
+    "ok": "#2e7d32",
+    "warning": "#f9a825",
+    "critical": "#c62828",
+    "unknown": "#546e7a",
+}
+
+# Shelves hold eight machines, so the readouts are laid out eight to a row and
+# the grid maps onto what someone sees when they walk down the aisle.
+PER_ROW = 8
+
+
+def _bubble_cell(
+    value_entity: str, status_entity: str, label: str, colors: dict[str, str]
+) -> dict:
+    """One coloured cell: the number, tinted by its status entity."""
+    mapping = ", ".join(f"'{k}': '{v}'" for k, v in colors.items())
+    return {
+        "type": "custom:bubble-card",
+        "card_type": "button",
+        "button_type": "state",
+        "entity": value_entity,
+        "name": label,
+        "show_state": True,
+        "show_icon": False,
+        "card_layout": "large",
+        "tap_action": {"action": "more-info"},
+        # bubble-card evaluates ${...} inside `styles` as JavaScript. Keeping
+        # this to plain CSS with a single interpolation is the form least
+        # likely to break across card versions.
+        "styles": (
+            ".bubble-button-background {\n"
+            "  opacity: 1 !important;\n"
+            "  background: ${"
+            f"({{{mapping}}})[(hass.states['{status_entity}'] || {{}}).state]"
+            " || '#546e7a'} !important;\n"
+            "}\n"
+            ".bubble-name, .bubble-state {\n"
+            "  color: #fff !important;\n"
+            "  font-weight: 600;\n"
+            "}\n"
+        ),
+    }
+
+
+def _stock_cell(
+    value_entity: str, status_entity: str, label: str, colors: dict[str, str]
+) -> dict:
+    """Fallback with built-in cards only: no colour, just the number."""
+    return {
+        "type": "tile",
+        "entity": value_entity,
+        "name": label,
+        "hide_state": False,
+        "vertical": True,
+        "grid_options": {"columns": 3, "rows": 1},
+    }
+
+
+def readout_grid(
+    entities: list[tuple[str, str, str]], colors: dict[str, str], title: str, cards: str
+) -> list[dict]:
+    """A titled grid of coloured cells, eight to a row."""
+    build = _bubble_cell if cards == "bubble" else _stock_cell
+    cells = [build(value, status, label, colors) for value, status, label in entities]
+    return [
+        heading(title, "subtitle", "mdi:view-grid-outline"),
+        {"type": "grid", "columns": PER_ROW, "square": False, "cards": cells},
+    ]
+
+
 def heading(text: str, style: str = "subtitle", icon: str | None = None) -> dict:
     card = {"type": "heading", "heading": text, "heading_style": style}
     if icon:
@@ -122,7 +203,12 @@ def action_button(
     }
 
 
-def build_view(entity_ids: set[str], rack: str = "R1", lang: str = "ru") -> dict:
+def build_view(
+    entity_ids: set[str],
+    rack: str = "R1",
+    lang: str = "ru",
+    cards: str = "bubble",
+) -> dict:
     t = TEXT[lang]
     slugs = sorted(
         e.split(".", 1)[1][: -len("_internet")]
@@ -162,6 +248,7 @@ def build_view(entity_ids: set[str], rack: str = "R1", lang: str = "ru") -> dict
         ("miners_blocked", t["blocked"], "red"),
         ("miners_offline", t["no_link"], "orange"),
         ("miners_with_problems", t["problems"], "amber"),
+        ("miners_with_errors", t["errors"], "red"),
         ("fleet_temperature_max", t["temp_max"], "deep-orange"),
     ):
         eid = f"sensor.{DOMAIN}_{suffix}"
@@ -223,28 +310,32 @@ def build_view(entity_ids: set[str], rack: str = "R1", lang: str = "ru") -> dict
             t["confirm_reboot"].format(rack=rack),
         ),
         action_button(t["refresh"], "mdi:refresh", f"{DOMAIN}.refresh", {}, None),
+        action_button(t["discover"], "mdi:radar", f"{DOMAIN}.discover", {}, None),
+        action_button(
+            t["reset"],
+            "mdi:delete-sweep",
+            f"{DOMAIN}.reset",
+            {"keep_manual": True},
+            t["confirm_reset"],
+        ),
     ]
 
-    def glance(title: str, suffix: str) -> dict:
-        return {
-            "type": "glance",
-            "title": title,
-            "columns": 4,
-            "show_name": True,
-            "show_state": True,
-            "show_icon": False,
-            "entities": [
-                {"entity": f"sensor.{s}_{suffix}", "name": short(s)}
-                for s in ordered
-                if has(f"sensor.{s}_{suffix}")
-            ],
-        }
+    def cells(suffix: str, status_suffix: str) -> list[tuple[str, str, str]]:
+        return [
+            (f"sensor.{s}_{suffix}", f"sensor.{s}_{status_suffix}", short(s))
+            for s in ordered
+            if has(f"sensor.{s}_{suffix}")
+        ]
 
-    readouts = [
-        heading(t["readouts"], "subtitle", "mdi:chart-box-outline"),
-        glance(t["hashrate_mhs"], "hashrate"),
-        glance(t["temp_c"], "temperature_max"),
-    ]
+    readouts = readout_grid(
+        cells("hashrate", "hashrate_status"), HASHRATE_COLORS, t["hashrate_mhs"], cards
+    )
+    temperatures = readout_grid(
+        cells("temperature_max", "temperature_status"),
+        TEMPERATURE_COLORS,
+        t["temp_c"],
+        cards,
+    )
 
     switches = [heading(t["per_miner"], "subtitle", "mdi:toggle-switch-outline")]
     switches += [
@@ -265,7 +356,8 @@ def build_view(entity_ids: set[str], rack: str = "R1", lang: str = "ru") -> dict
         {"type": "grid", "cards": summary},
         {"type": "grid", "cards": attention},
         {"type": "grid", "cards": control},
-        {"type": "grid", "cards": readouts},
+        {"type": "grid", "cards": readouts, "column_span": 2},
+        {"type": "grid", "cards": temperatures, "column_span": 2},
         {"type": "grid", "cards": switches, "column_span": 2},
     ]
 
@@ -305,6 +397,14 @@ def build_view(entity_ids: set[str], rack: str = "R1", lang: str = "ru") -> dict
 
 TEXT = {
     "ru": {
+        "errors": "Ошибки",
+        "not_hashing": "Не хешируют",
+        "discover": "Найти майнеры",
+        "reset": "Сбросить список",
+        "confirm_reset": (
+            "Забыть все найденные майнеры и искать заново? "
+            "Добавленные вручную сохранятся."
+        ),
         "fleet": "ASIC Fleet",
         "hashrate": "Хешрейт",
         "power": "Мощность",
@@ -332,6 +432,13 @@ TEXT = {
         "unnamed": "Без имени — задать через asic_fleet.assign_name",
     },
     "en": {
+        "errors": "Errors",
+        "not_hashing": "Not hashing",
+        "discover": "Find miners",
+        "reset": "Reset inventory",
+        "confirm_reset": (
+            "Forget every discovered miner and search again? Hand-added ones are kept."
+        ),
         "fleet": "ASIC Fleet",
         "hashrate": "Hashrate",
         "power": "Power",
@@ -367,6 +474,13 @@ async def main() -> None:
     parser.add_argument("--rack", default="R1")
     parser.add_argument("--lang", default="ru", choices=sorted(TEXT))
     parser.add_argument(
+        "--cards",
+        default="bubble",
+        choices=("bubble", "stock"),
+        help="bubble: coloured cells via custom:bubble-card (HACS). "
+        "stock: built-in cards only, no colour.",
+    )
+    parser.add_argument(
         "--url", default=os.environ.get("HA_URL", "http://homeassistant.local:8123")
     )
     parser.add_argument("--token", default=os.environ.get("HA_TOKEN", ""))
@@ -383,7 +497,7 @@ async def main() -> None:
         entity_ids = {
             e["entity_id"] for e in registry if e.get("config_entry_id") in entry_ids
         }
-        view = build_view(entity_ids, rack=args.rack, lang=args.lang)
+        view = build_view(entity_ids, rack=args.rack, lang=args.lang, cards=args.cards)
 
         if not args.dashboard:
             print(json.dumps(view, ensure_ascii=False, indent=2))
