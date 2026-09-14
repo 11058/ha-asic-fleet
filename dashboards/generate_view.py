@@ -110,7 +110,10 @@ def _bubble_cell(
         "card_type": "button",
         "button_type": "state",
         "entity": value_entity,
+        # No label: eight to a row matches a shelf, so position already says
+        # which machine this is, and the number needs the whole cell.
         "name": label,
+        "show_name": False,
         "show_state": True,
         "show_icon": False,
         "card_layout": "large",
@@ -125,10 +128,11 @@ def _bubble_cell(
             f"({{{mapping}}})[(hass.states['{status_entity}'] || {{}}).state]"
             " || '#546e7a'} !important;\n"
             "}\n"
-            ".bubble-name, .bubble-state {\n"
+            ".bubble-state {\n"
             "  color: #fff !important;\n"
             "  font-weight: 600;\n"
             "}\n"
+            ".bubble-name { display: none !important; }\n"
         ),
     }
 

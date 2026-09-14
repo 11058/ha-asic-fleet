@@ -50,7 +50,7 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
         translation_key="hashrate",
         native_unit_of_measurement="MH/s",
         state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=0,
+        suggested_display_precision=1,
         value_fn=lambda r: r.telemetry.rate_5s,
         attrs_fn=lambda r: {
             "rate_30m": r.telemetry.rate_30m,
@@ -89,6 +89,7 @@ ASIC_SENSORS: tuple[AsicSensorDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
         value_fn=lambda r: r.telemetry.temp_max,
         attrs_fn=lambda r: {
             "temp_min": r.telemetry.temp_min,
