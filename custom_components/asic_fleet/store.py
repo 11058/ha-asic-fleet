@@ -13,51 +13,23 @@ A record here outlives leases, restarts and outages. Discovery adds to it,
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .models import StoredMiner
+
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
-SAVE_DELAY = 30.0
 
-
-@dataclass
-class StoredMiner:
-    """One miner as last known, independent of whether it answers today."""
-
-    mac: str
-    name: str = ""
-    rack: str | None = None
-    index: int | None = None
-    marker: str = ""
-    lease_hostname: str | None = None
-    ip: str | None = None
-    port: str | None = None
-    model: str | None = None
-    firmware: str | None = None
-    serial: str | None = None
-    algorithm: str = "unknown"
-    named: bool = False
-    # Added by hand through the service rather than found on the network.
-    manual: bool = False
-    first_seen: str | None = None
-    last_seen: str | None = None
-    # Raw get_system_info payload, so a miner that is offline at startup does
-    # not have to be re-probed before it can be identified.
-    probe: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> StoredMiner:
-        known = {f for f in cls.__dataclass_fields__}
-        return cls(**{k: v for k, v in data.items() if k in known})
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+# Must stay well below the poll interval. Every cycle folds its findings back
+# into the inventory, and a debounce as long as the cycle would be reset each
+# time just before firing — the file would then only ever be written on a
+# clean shutdown, which is exactly the case a crash does not provide.
+SAVE_DELAY = 5.0
 
 
 class MinerStore:
@@ -98,13 +70,9 @@ class MinerStore:
         if existing is None:
             miner.first_seen = miner.first_seen or dt_util.utcnow().isoformat()
             self.miners[miner.mac] = miner
-        else:
-            for key, value in miner.to_dict().items():
-                # Never overwrite something known with nothing: a miner that is
-                # offline today still keeps yesterday's model and IP.
-                if value not in (None, "", {}, "unknown"):
-                    setattr(existing, key, value)
-        self.save()
+            self.save()
+        elif existing.merge_from(miner):
+            self.save()
         return self.miners[miner.mac]
 
     def touch(self, mac: str) -> None:

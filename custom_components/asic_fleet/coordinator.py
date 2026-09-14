@@ -420,6 +420,9 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
                     algorithm=record.algorithm,
                     named=record.named,
                     manual=record.manual,
+                    last_seen=record.last_seen.isoformat()
+                    if record.last_seen
+                    else None,
                     probe=self._confirmed.get(record.mac, {}),
                 )
             )
