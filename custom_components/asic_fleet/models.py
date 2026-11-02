@@ -39,6 +39,8 @@ class StoredMiner:
     manual: bool = False
     first_seen: str | None = None
     last_seen: str | None = None
+    # Smart plug entity feeding this miner ("" = none).
+    plug: str = ""
     # Raw get_system_info payload, so a miner that is offline at startup does
     # not have to be re-probed before it can be identified.
     probe: dict[str, Any] = field(default_factory=dict)

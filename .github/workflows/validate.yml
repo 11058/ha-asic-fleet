@@ -67,7 +67,7 @@ jobs:
           modules = [
               "const", "identity", "mikrotik", "asic_api", "coordinator",
               "entity", "config_flow", "sensor", "binary_sensor", "switch",
-              "button", "diagnostics", "",
+              "button", "diagnostics", "provision", "websocket_api", "panel", "",
           ]
           failed = []
           for name in modules:

@@ -9,6 +9,33 @@ Built for **Promminer** firmware (verified on `Promminer_L7_7007`), which
 accepts but silently ignores its own sleep mode — so the router's firewall is
 the only reliable way to stop a machine hashing without pulling power.
 
+## Setup without router scripts (0.5+)
+
+Adding the integration asks only for the router address — prefilled with
+Home Assistant's own gateway — and how to log in:
+
+* **Use the Site Health connection** — if Site Health manages the same
+  router, its login is reused; nothing to paste.
+* **Generate a script** — a block to paste into the router terminal
+  (HTTPS for HA only, user `ha-asic` with a random password).
+* **I have a login**.
+
+Nothing is installed on the router. The integration itself adds the block
+rule (`asic-fleet-block`: forward, from `asic_blocked`, to the WAN list —
+only to the WAN, so a blocked miner still answers Home Assistant) and pins
+every miner's DHCP lease as static, so a block by IP stays valid across
+renewals and Home Assistant restarts. A router that already has the old
+lease-script keeps working: the marker list is still kept in step.
+
+## Panel and smart plugs
+
+The **ASIC** sidebar panel shows the fleet grouped by rack or building:
+readable number and name on every tile, hashrate, temperature, block
+state; a tap opens the miner with all metrics and actions (block,
+blink, reboot if allowed, rename/move). Any `switch` entity — a smart
+plug — can be linked to a miner: its state and metered power show on the
+tile, and the miner can be power-cycled from the panel.
+
 ## Placement: racks or buildings
 
 Miners are grouped by **placement**, taken from the DHCP hostname:

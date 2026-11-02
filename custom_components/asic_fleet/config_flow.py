@@ -19,6 +19,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -30,18 +33,22 @@ from .const import (
     CONF_ASIC_PASSWORD,
     CONF_ASIC_PORT,
     CONF_ASIC_USERNAME,
+    CONF_AUTO_CONFIGURE,
     CONF_BLOCKLIST,
     CONF_FAIL_THRESHOLD,
     CONF_FAN_MIN_RPM,
+    CONF_HA_IP,
     CONF_HASHRATE_WARN_PCT,
     CONF_HOSTNAME_PATTERN,
     CONF_HW_ERROR_PCT,
     CONF_MARKER_LIST,
     CONF_OFFLINE_GRACE,
+    CONF_PIN_IPS,
     CONF_PROBE_SUBNETS,
     CONF_PROBE_UNKNOWN,
     CONF_ROUTER_HOST,
     CONF_ROUTER_PASSWORD,
+    CONF_ROUTER_PORT,
     CONF_ROUTER_TLS,
     CONF_ROUTER_USERNAME,
     CONF_ROUTER_VERIFY_SSL,
@@ -50,6 +57,7 @@ from .const import (
     CONF_TEMP_WARN,
     DEFAULT_ASIC_PORT,
     DEFAULT_ASIC_USERNAME,
+    DEFAULT_AUTO_CONFIGURE,
     DEFAULT_BLOCKLIST,
     DEFAULT_FAIL_THRESHOLD,
     DEFAULT_FAN_MIN_RPM,
@@ -58,6 +66,7 @@ from .const import (
     DEFAULT_HW_ERROR_PCT,
     DEFAULT_MARKER_LIST,
     DEFAULT_OFFLINE_GRACE,
+    DEFAULT_PIN_IPS,
     DEFAULT_PROBE_UNKNOWN,
     DEFAULT_ROUTER_USERNAME,
     DEFAULT_SCAN_INTERVAL,
@@ -66,22 +75,49 @@ from .const import (
     DOMAIN,
 )
 from .mikrotik import MikrotikAuthError, MikrotikClient, MikrotikError
+from .provision import USERNAME, new_password, onboarding_script
 
 _LOGGER = logging.getLogger(__name__)
 
-ROUTER_SCHEMA = vol.Schema(
+MANUAL_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_ROUTER_HOST): TextSelector(),
         vol.Required(
             CONF_ROUTER_USERNAME, default=DEFAULT_ROUTER_USERNAME
         ): TextSelector(),
         vol.Required(CONF_ROUTER_PASSWORD): TextSelector(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
         ),
-        vol.Optional(CONF_ROUTER_TLS, default=False): BooleanSelector(),
+        vol.Optional(CONF_ROUTER_TLS, default=True): BooleanSelector(),
+        vol.Optional(CONF_ROUTER_PORT, default=0): NumberSelector(
+            NumberSelectorConfig(min=0, max=65535, mode=NumberSelectorMode.BOX)
+        ),
         vol.Optional(CONF_ROUTER_VERIFY_SSL, default=False): BooleanSelector(),
     }
 )
+
+
+async def _source_ip(hass, target: str) -> str:
+    from homeassistant.components import network
+
+    try:
+        return await network.async_get_source_ip(hass, target_ip=target)
+    except Exception:
+        return ""
+
+
+async def _suggest_gateway(hass) -> str:
+    """HA's own gateway (x.y.z.1): the core router, seen from HA's segment."""
+    from homeassistant.components import network
+
+    try:
+        ip = await network.async_get_source_ip(hass)
+    except Exception:
+        return ""
+    parts = ip.split(".")
+    if len(parts) != 4 or ip.startswith("127."):
+        return ""
+    return ".".join([*parts[:3], "1"])
+
 
 ASIC_SCHEMA = vol.Schema(
     {
@@ -103,37 +139,137 @@ class AsicFleetConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._router: dict[str, Any] = {}
+        self._host = ""
+        self._ha_ip = ""
+        self._password = ""
+
+    async def _probe_router(self, data: dict[str, Any]) -> str | None:
+        client = MikrotikClient(
+            async_get_clientsession(self.hass, verify_ssl=False),
+            data[CONF_ROUTER_HOST],
+            data[CONF_ROUTER_USERNAME],
+            data[CONF_ROUTER_PASSWORD],
+            tls=data.get(CONF_ROUTER_TLS, True),
+            verify_ssl=data.get(CONF_ROUTER_VERIFY_SSL, False),
+            port=data.get(CONF_ROUTER_PORT) or None,
+        )
+        try:
+            identity = await client.identity()
+        except MikrotikAuthError:
+            return "invalid_auth"
+        except MikrotikError:
+            return "cannot_connect"
+        self._router = dict(data)
+        self._router["identity"] = identity.get("name")
+        return None
+
+    def _site_health_entries(self) -> list:
+        return self.hass.config_entries.async_entries("site_health")
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Router address (HA's own gateway by default) and how to log in."""
+        if user_input is not None:
+            host = user_input[CONF_ROUTER_HOST].strip()
+            await self.async_set_unique_id(f"{DOMAIN}_{host}")
+            self._abort_if_unique_id_configured()
+            self._host = host
+            self._ha_ip = await _source_ip(self.hass, host)
+            method = user_input["method"]
+            if method == "site_health":
+                return await self.async_step_site_health()
+            if method == "script":
+                self._password = new_password()
+                return await self.async_step_onboard()
+            return await self.async_step_manual()
+        methods = ["script", "manual"]
+        if self._site_health_entries():
+            methods.insert(0, "site_health")
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_ROUTER_HOST, default=await _suggest_gateway(self.hass)
+                ): TextSelector(),
+                vol.Required("method", default=methods[0]): SelectSelector(
+                    SelectSelectorConfig(
+                        options=methods,
+                        translation_key="method",
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="user", data_schema=schema)
+
+    async def async_step_site_health(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Reuse the login Site Health already has for this router."""
+        entries = self._site_health_entries()
+        match = [e for e in entries if e.data.get("host") == self._host] or entries
+        sh = match[0].data
+        data = {
+            CONF_ROUTER_HOST: self._host,
+            CONF_ROUTER_USERNAME: sh.get("username"),
+            CONF_ROUTER_PASSWORD: sh.get("password"),
+            CONF_ROUTER_TLS: sh.get("tls", True),
+            CONF_ROUTER_VERIFY_SSL: sh.get("verify_ssl", False),
+            CONF_ROUTER_PORT: sh.get("port") or 0,
+            CONF_HA_IP: sh.get("ha_ip") or self._ha_ip,
+        }
+        err = await self._probe_router(data)
+        if err:
+            return self.async_abort(reason=f"site_health_{err}")
+        return await self.async_step_asic()
+
+    async def async_step_onboard(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            client = MikrotikClient(
-                async_get_clientsession(self.hass),
-                user_input[CONF_ROUTER_HOST],
-                user_input[CONF_ROUTER_USERNAME],
-                user_input[CONF_ROUTER_PASSWORD],
-                tls=user_input.get(CONF_ROUTER_TLS, False),
-                verify_ssl=user_input.get(CONF_ROUTER_VERIFY_SSL, False),
-            )
-            try:
-                identity = await client.identity()
-            except MikrotikAuthError:
-                errors["base"] = "invalid_auth"
-            except MikrotikError:
-                errors["base"] = "cannot_connect"
-            else:
-                await self.async_set_unique_id(
-                    f"{DOMAIN}_{user_input[CONF_ROUTER_HOST]}"
-                )
-                self._abort_if_unique_id_configured()
-                self._router = dict(user_input)
-                self._router["identity"] = identity.get("name")
+            data = {
+                CONF_ROUTER_HOST: self._host,
+                CONF_ROUTER_USERNAME: USERNAME,
+                CONF_ROUTER_PASSWORD: self._password,
+                CONF_ROUTER_TLS: True,
+                CONF_ROUTER_VERIFY_SSL: False,
+                CONF_ROUTER_PORT: 0,
+                CONF_HA_IP: self._ha_ip,
+            }
+            err = await self._probe_router(data)
+            if not err:
                 return await self.async_step_asic()
-
+            errors["base"] = err
         return self.async_show_form(
-            step_id="user", data_schema=ROUTER_SCHEMA, errors=errors
+            step_id="onboard",
+            data_schema=vol.Schema({}),
+            errors=errors,
+            description_placeholders={
+                "host": self._host,
+                "ha_ip": self._ha_ip or "?",
+                "script": onboarding_script(
+                    ha_ip=self._ha_ip or "HA_IP", password=self._password
+                ),
+            },
+        )
+
+    async def async_step_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            data = {
+                CONF_ROUTER_HOST: self._host,
+                CONF_HA_IP: self._ha_ip,
+                **user_input,
+            }
+            err = await self._probe_router(data)
+            if not err:
+                return await self.async_step_asic()
+            errors["base"] = err
+        return self.async_show_form(
+            step_id="manual", data_schema=MANUAL_SCHEMA, errors=errors
         )
 
     async def async_step_asic(
@@ -202,6 +338,14 @@ class AsicFleetOptionsFlow(OptionsFlow):
                     CONF_PROBE_SUBNETS,
                     default=options.get(CONF_PROBE_SUBNETS, ""),
                 ): TextSelector(),
+                vol.Optional(
+                    CONF_PIN_IPS,
+                    default=options.get(CONF_PIN_IPS, DEFAULT_PIN_IPS),
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_AUTO_CONFIGURE,
+                    default=options.get(CONF_AUTO_CONFIGURE, DEFAULT_AUTO_CONFIGURE),
+                ): BooleanSelector(),
                 vol.Optional(
                     CONF_BLOCKLIST,
                     default=options.get(CONF_BLOCKLIST, DEFAULT_BLOCKLIST),

@@ -21,6 +21,10 @@ CONF_SCAN_INTERVAL: Final = "scan_interval"
 CONF_HOSTNAME_PATTERN: Final = "hostname_pattern"
 CONF_PROBE_UNKNOWN: Final = "probe_unknown"
 CONF_PROBE_SUBNETS: Final = "probe_subnets"
+CONF_PIN_IPS: Final = "pin_ips"
+CONF_AUTO_CONFIGURE: Final = "auto_configure"
+CONF_HA_IP: Final = "ha_ip"
+CONF_ROUTER_PORT: Final = "router_port"
 CONF_ALIASES: Final = "aliases"
 CONF_BLOCKLIST: Final = "blocklist"
 CONF_MARKER_LIST: Final = "marker_list"
@@ -60,6 +64,8 @@ DEFAULT_HW_ERROR_PCT: Final = 5.0
 DEFAULT_OFFLINE_GRACE: Final = 180
 DEFAULT_FAIL_THRESHOLD: Final = 3
 DEFAULT_PROBE_UNKNOWN: Final = True
+DEFAULT_PIN_IPS: Final = True
+DEFAULT_AUTO_CONFIGURE: Final = True
 
 # Concurrency ceiling for per-ASIC HTTP polling. Keeps a 56-machine farm from
 # opening 56 sockets at once on the HA box.

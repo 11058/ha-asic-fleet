@@ -2,14 +2,11 @@
   "config": {
     "step": {
       "user": {
-        "title": "MikroTik router",
-        "description": "The router that hands out DHCP leases to the miners and holds the firewall block lists.",
+        "title": "Router",
+        "description": "The MikroTik that hands out the miners' addresses. Prefilled with Home Assistant's own gateway. Fastest: reuse the Site Health login; otherwise generate a block to paste into the router terminal. No scripts are installed on the router: the integration adds its block rule itself and pins miners' addresses with static DHCP leases.",
         "data": {
-          "router_host": "Host or IP",
-          "router_username": "Username",
-          "router_password": "Password",
-          "router_tls": "Use HTTPS (www-ssl)",
-          "router_verify_ssl": "Verify certificate"
+          "router_host": "Router address",
+          "method": "How to connect"
         }
       },
       "asic": {
@@ -20,6 +17,20 @@
           "asic_password": "Password",
           "asic_port": "HTTP port"
         }
+      },
+      "onboard": {
+        "title": "Paste into the router terminal",
+        "description": "Open a terminal on **{host}** and paste. It enables HTTPS for Home Assistant **{ha_ip}** only and creates the user `ha-asic` (read + write: address lists, firewall, leases) with a random password. Then press Submit.\n\n```\n{script}\n```"
+      },
+      "manual": {
+        "title": "Router login",
+        "data": {
+          "router_username": "Username",
+          "router_password": "Password",
+          "router_tls": "HTTPS (www-ssl)",
+          "router_port": "Port (0 = default)",
+          "router_verify_ssl": "Verify certificate"
+        }
       }
     },
     "error": {
@@ -27,7 +38,9 @@
       "invalid_auth": "RouterOS rejected these credentials."
     },
     "abort": {
-      "already_configured": "This router is already set up."
+      "already_configured": "This router is already set up.",
+      "site_health_invalid_auth": "The Site Health login was rejected by this router",
+      "site_health_cannot_connect": "The router does not answer with the Site Health login"
     }
   },
   "options": {
@@ -49,7 +62,9 @@
           "fail_threshold": "Consecutive polls before raising a problem",
           "allow_reboot": "Allow reboot",
           "allow_pool_write": "Allow pool configuration writes",
-          "probe_subnets": "Miner subnets to probe (comma separated; empty = the router's ASIC segment: an *asic* interface or VLAN 64)"
+          "probe_subnets": "Miner subnets to probe (comma separated; empty = the router's ASIC segment: an *asic* interface or VLAN 64)",
+          "pin_ips": "Pin miners' addresses (static DHCP leases) — keeps blocks valid without a router script",
+          "auto_configure": "Add the block rule on the router automatically"
         },
         "data_description": {
           "probe_unknown": "Finds miners that never publish a DHCP hostname (e.g. Antminer L9) by asking each unknown lease whether it answers the miner CGI API.",
@@ -349,6 +364,15 @@
           "name": "Keep hand-added",
           "description": "Hand-added miners cannot be rediscovered, so they are kept by default."
         }
+      }
+    }
+  },
+  "selector": {
+    "method": {
+      "options": {
+        "site_health": "Use the Site Health connection",
+        "script": "Generate a script to paste",
+        "manual": "I have a login"
       }
     }
   }

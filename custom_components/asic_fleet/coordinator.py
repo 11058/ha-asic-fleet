@@ -30,6 +30,7 @@ from .const import (
     CONF_HW_ERROR_PCT,
     CONF_MARKER_LIST,
     CONF_OFFLINE_GRACE,
+    CONF_PIN_IPS,
     CONF_PROBE_SUBNETS,
     CONF_PROBE_UNKNOWN,
     CONF_SCAN_INTERVAL,
@@ -43,6 +44,7 @@ from .const import (
     DEFAULT_HW_ERROR_PCT,
     DEFAULT_MARKER_LIST,
     DEFAULT_OFFLINE_GRACE,
+    DEFAULT_PIN_IPS,
     DEFAULT_PROBE_UNKNOWN,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TEMP_CRIT,
@@ -114,6 +116,8 @@ class AsicRecord:
     manual: bool = False
     # Filled in during evaluation, where the thresholds live.
     temp_status: str = "unknown"
+    # Smart plug (a switch entity) feeding this miner, if linked.
+    plug: str = ""
 
     @property
     def online(self) -> bool:
@@ -340,6 +344,12 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
             record.block_ip_synced = not record.blocked or (
                 blocked_entry_ip is not None and blocked_entry_ip == record.ip
             )
+
+        if self._opt(CONF_PIN_IPS, DEFAULT_PIN_IPS):
+            await self._pin_leases(leases, records)
+        for record in records.values():
+            stored = self.store.get(record.mac)
+            record.plug = stored.plug if stored else ""
 
         await self._identify(records)
         await self._poll_all(records)
@@ -836,8 +846,60 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
             return None
         return self.data.asics.get(_norm_mac(mac))
 
+    async def _pin_leases(
+        self, leases: list[dict[str, Any]], records: dict[str, AsicRecord]
+    ) -> None:
+        """Make the dynamic leases of known miners static, a few per poll."""
+        done = 0
+        for lease in leases:
+            if done >= 5:
+                break
+            mac = _norm_mac(lease.get("mac-address", ""))
+            if mac not in records or str(lease.get("dynamic")) != "true":
+                continue
+            if not lease.get(".id"):
+                continue
+            try:
+                await self.router.make_lease_static(lease[".id"])
+                done += 1
+            except MikrotikError as err:
+                _LOGGER.debug("lease of %s not pinned: %s", mac, err)
+
+    async def _pin_one(self, mac: str) -> None:
+        """Pin one miner's lease right before it is blocked."""
+        try:
+            for lease in await self.router.leases():
+                if _norm_mac(lease.get("mac-address", "")) != mac:
+                    continue
+                if str(lease.get("dynamic")) == "true" and lease.get(".id"):
+                    await self.router.make_lease_static(lease[".id"])
+        except MikrotikError as err:
+            _LOGGER.warning("Lease of %s not pinned before blocking: %s", mac, err)
+
+    async def async_set_plug(self, mac: str, entity_id: str | None) -> None:
+        stored = self.store.get(mac)
+        if stored is None:
+            raise AsicError(f"{mac}: unknown miner")
+        stored.plug = entity_id or ""
+        await self.store.async_save_now()
+        await self.async_request_refresh()
+
+    async def async_power_cycle(self, record: AsicRecord, off_s: int = 15) -> None:
+        """Switch the miner's smart plug off and back on."""
+        if not record.plug:
+            raise AsicError(f"{record.name}: no smart plug linked")
+        await self.hass.services.async_call(
+            "homeassistant", "turn_off", {"entity_id": record.plug}, blocking=True
+        )
+        await asyncio.sleep(off_s)
+        await self.hass.services.async_call(
+            "homeassistant", "turn_on", {"entity_id": record.plug}, blocking=True
+        )
+
     async def async_set_blocked(self, record: AsicRecord, blocked: bool) -> None:
         """Add or remove this miner's entries in both address lists."""
+        if blocked:
+            await self._pin_one(record.mac)
         entries = await self.router.address_lists()
         mine = [e for e in entries if e.get("comment") == record.marker]
 

@@ -36,12 +36,15 @@ from .const import (
     CONF_ASIC_PASSWORD,
     CONF_ASIC_PORT,
     CONF_ASIC_USERNAME,
+    CONF_AUTO_CONFIGURE,
     CONF_ROUTER_HOST,
     CONF_ROUTER_PASSWORD,
+    CONF_ROUTER_PORT,
     CONF_ROUTER_TLS,
     CONF_ROUTER_USERNAME,
     CONF_ROUTER_VERIFY_SSL,
     DEFAULT_ASIC_PORT,
+    DEFAULT_AUTO_CONFIGURE,
     DOMAIN,
     SERVICE_ADD_DEVICE,
     SERVICE_ASSIGN_NAME,
@@ -135,12 +138,13 @@ SET_POOLS_SCHEMA = vol.Schema(
 async def async_setup_entry(hass: HomeAssistant, entry: AsicFleetConfigEntry) -> bool:
     """Set up ASIC Fleet from a config entry."""
     router = MikrotikClient(
-        async_get_clientsession(hass),
+        async_get_clientsession(hass, verify_ssl=False),
         entry.data[CONF_ROUTER_HOST],
         entry.data[CONF_ROUTER_USERNAME],
         entry.data[CONF_ROUTER_PASSWORD],
         tls=entry.data.get(CONF_ROUTER_TLS, False),
         verify_ssl=entry.data.get(CONF_ROUTER_VERIFY_SSL, False),
+        port=entry.data.get(CONF_ROUTER_PORT) or None,
     )
     asic = AsicClient(
         get_async_client(hass, verify_ssl=False),
@@ -170,7 +174,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: AsicFleetConfigEntry) ->
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     _async_register_services(hass)
+    if entry.options.get(CONF_AUTO_CONFIGURE, DEFAULT_AUTO_CONFIGURE):
+        entry.async_create_background_task(
+            hass, _async_provision(hass, entry, coordinator), f"{DOMAIN} provision"
+        )
+    from .panel import async_setup_panel
+
+    await async_setup_panel(hass)
     return True
+
+
+async def _async_provision(
+    hass: HomeAssistant, entry: AsicFleetConfigEntry, coordinator
+) -> None:
+    """Put the block rule on the router if it is missing; report what changed."""
+    from homeassistant.components import persistent_notification
+
+    from .provision import async_ensure_block_rule
+
+    result = await async_ensure_block_rule(coordinator.router, coordinator.blocklist)
+    if not result.done and not result.failed:
+        return
+    lines = [f"- added: {x}" for x in result.done]
+    lines += [f"- **failed**: {x}" for x in result.failed]
+    persistent_notification.async_create(
+        hass,
+        f"ASIC Fleet configured the router {entry.data.get(CONF_ROUTER_HOST)}:\n\n"
+        + "\n".join(lines),
+        title="ASIC Fleet",
+        notification_id=f"{DOMAIN}_{entry.entry_id}_provision",
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: AsicFleetConfigEntry) -> bool:

@@ -40,11 +40,13 @@ class MikrotikClient:
         *,
         tls: bool = False,
         verify_ssl: bool = False,
+        port: int | None = None,
     ) -> None:
         self._session = session
         self._host = host
         self._auth = BasicAuth(username, password)
-        self._base = f"{'https' if tls else 'http'}://{host}/rest"
+        netloc = f"{host}:{port}" if port else host
+        self._base = f"{'https' if tls else 'http'}://{netloc}/rest"
         # RouterOS' self-signed cert is the norm here; the option exists so a
         # site with a real cert can turn verification back on.
         self._ssl: Any = None if not tls else verify_ssl
@@ -99,6 +101,30 @@ class MikrotikClient:
     async def leases(self) -> list[dict[str, Any]]:
         data = await self._request("GET", "ip/dhcp-server/lease")
         return data if isinstance(data, list) else []
+
+    async def firewall_filters(self) -> list[dict[str, Any]]:
+        data = await self._request("GET", "ip/firewall/filter")
+        return data if isinstance(data, list) else []
+
+    async def add_firewall_filter(self, rule: dict[str, Any]) -> None:
+        await self._request("PUT", "ip/firewall/filter", rule)
+
+    async def interface_lists(self) -> list[dict[str, Any]]:
+        try:
+            data = await self._request("GET", "interface/list")
+        except MikrotikError:
+            return []
+        return data if isinstance(data, list) else []
+
+    async def make_lease_static(self, lease_id: str) -> None:
+        """Pin a dynamic DHCP lease: the miner keeps this IP for good.
+
+        That is what lets a block (an address-list entry by IP) survive a
+        renewal or a Home Assistant outage without a script on the router.
+        """
+        await self._request(
+            "POST", "ip/dhcp-server/lease/make-static", {".id": lease_id}
+        )
 
     async def addresses(self) -> list[dict[str, Any]]:
         data = await self._request("GET", "ip/address")
