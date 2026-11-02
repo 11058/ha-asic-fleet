@@ -44,7 +44,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install pytest httpx
+      - run: pip install pytest httpx aiohttp
       - run: pytest tests -q
 
   imports:
