@@ -36,7 +36,7 @@
         "title": "Настройки ASIC Fleet",
         "data": {
           "scan_interval": "Интервал опроса (секунды)",
-          "hostname_pattern": "Шаблон имени хоста (regex с группами rack/index)",
+          "hostname_pattern": "Шаблон имени (regex): ряд R1-ASIC3 или место Garazh-ASIC2; группы rack/place и index",
           "probe_unknown": "Опрашивать неизвестные DHCP-аренды на предмет майнеров",
           "blocklist": "Address-list с IP-адресами",
           "marker_list": "Address-list с маркерами блокировки",
@@ -48,7 +48,8 @@
           "offline_grace": "Задержка перед статусом offline (секунды)",
           "fail_threshold": "Сколько опросов подряд до объявления проблемы",
           "allow_reboot": "Разрешить перезагрузку",
-          "allow_pool_write": "Разрешить запись конфигурации пулов"
+          "allow_pool_write": "Разрешить запись конфигурации пулов",
+          "probe_subnets": "Подсети майнеров для поиска (через запятую; пусто — сегмент ASIC роутера: интерфейс *asic* или VLAN 64)"
         },
         "data_description": {
           "probe_unknown": "Находит майнеры, которые не сообщают hostname по DHCP (например Antminer L9): каждая неизвестная аренда проверяется запросом к CGI-API майнера.",

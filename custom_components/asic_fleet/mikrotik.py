@@ -100,6 +100,17 @@ class MikrotikClient:
         data = await self._request("GET", "ip/dhcp-server/lease")
         return data if isinstance(data, list) else []
 
+    async def addresses(self) -> list[dict[str, Any]]:
+        data = await self._request("GET", "ip/address")
+        return data if isinstance(data, list) else []
+
+    async def vlans(self) -> list[dict[str, Any]]:
+        try:
+            data = await self._request("GET", "interface/vlan")
+        except MikrotikError:
+            return []
+        return data if isinstance(data, list) else []
+
     async def address_lists(self) -> list[dict[str, Any]]:
         data = await self._request("GET", "ip/firewall/address-list")
         return data if isinstance(data, list) else []

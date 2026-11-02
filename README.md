@@ -9,6 +9,27 @@ Built for **Promminer** firmware (verified on `Promminer_L7_7007`), which
 accepts but silently ignores its own sleep mode — so the router's firewall is
 the only reliable way to stop a machine hashing without pulling power.
 
+## Placement: racks or buildings
+
+Miners are grouped by **placement**, taken from the DHCP hostname:
+
+| Site layout | Hostname | Placement |
+|---|---|---|
+| Farm with racks | `R1-ASIC3` | rack `R1`, index 3 |
+| Site with several buildings | `Garazh-ASIC2`, `Баня-ASIC1` | `Garazh`, `Баня` |
+
+Both forms are understood by the default pattern; a custom regex with
+`rack` / `place` and `index` groups can be set in the options. The rack
+services (`block_rack`, `reboot_rack`, ...) take any placement name.
+
+## Where miners are looked for
+
+Unknown machines are probed for a miner API only in the miners' subnet:
+the subnets set in the options, or else the router's ASIC segment (an
+interface named `*asic*`/`*miner*` or VLAN 64 — the SRVPRM standard is
+VLAN 64 = `10.N.64.0/21`). Without such a segment every lease is probed,
+as before.
+
 ## What it gives you
 
 **Per miner** (one HA device each, keyed by MAC address):

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -17,6 +19,8 @@ from homeassistant.util import dt as dt_util
 
 from .asic_api import AsicClient, AsicError, AsicTelemetry
 from .const import (
+    ASIC_INTERFACE_HINTS,
+    ASIC_VLAN_ID,
     CONF_ALIASES,
     CONF_BLOCKLIST,
     CONF_FAIL_THRESHOLD,
@@ -26,6 +30,7 @@ from .const import (
     CONF_HW_ERROR_PCT,
     CONF_MARKER_LIST,
     CONF_OFFLINE_GRACE,
+    CONF_PROBE_SUBNETS,
     CONF_PROBE_UNKNOWN,
     CONF_SCAN_INTERVAL,
     CONF_TEMP_CRIT,
@@ -212,6 +217,8 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
     ) -> None:
         self.entry = entry
         self.router = router
+        self._probe_nets: list = []
+        self._probe_nets_at = 0.0
         self.asic = asic
         self.store = store
         self._probe_skip: dict[str, int] = {}
@@ -255,6 +262,46 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         return dict(self._opt(CONF_ALIASES, {}) or {})
 
     # --- main loop -----------------------------------------------------------
+
+    async def _refresh_probe_networks(self) -> None:
+        """Subnets to probe for unknown miners: configured, else the router's
+        ASIC segment (an interface named *asic*/*miner* or VLAN 64), else all.
+        """
+        configured = str(self._opt(CONF_PROBE_SUBNETS, "") or "")
+        if configured.strip():
+            nets = []
+            for part in re.split(r"[,\s]+", configured.strip()):
+                try:
+                    nets.append(ipaddress.ip_network(part, strict=False))
+                except ValueError:
+                    _LOGGER.warning("Ignoring bad probe subnet %r", part)
+            self._probe_nets = nets
+            return
+        now = time.monotonic()
+        if now - self._probe_nets_at < 600:
+            return
+        self._probe_nets_at = now
+        try:
+            addresses, vlans = await asyncio.gather(
+                self.router.addresses(), self.router.vlans()
+            )
+        except MikrotikError as err:
+            _LOGGER.debug("router addresses unavailable: %s", err)
+            return
+        asic_ifaces = {
+            v.get("name") for v in vlans if str(v.get("vlan-id")) == str(ASIC_VLAN_ID)
+        }
+        nets = []
+        for row in addresses:
+            iface = str(row.get("interface", ""))
+            if iface in asic_ifaces or any(
+                h in iface.lower() for h in ASIC_INTERFACE_HINTS
+            ):
+                try:
+                    nets.append(ipaddress.ip_interface(row["address"]).network)
+                except (KeyError, ValueError):
+                    continue
+        self._probe_nets = nets
 
     async def _async_update_data(self) -> FleetData:
         try:
@@ -333,6 +380,7 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         """
         pattern = re.compile(self._opt(CONF_HOSTNAME_PATTERN, DEFAULT_HOSTNAME_PATTERN))
         aliases = self.aliases
+        await self._refresh_probe_networks()
         records: dict[str, AsicRecord] = {}
         candidates: list[tuple[str, str, dict[str, Any]]] = []
 
@@ -387,6 +435,10 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
                     hostname.lower() in collisions,
                 )
             elif self._opt(CONF_PROBE_UNKNOWN, DEFAULT_PROBE_UNKNOWN):
+                # On a mixed site only the miners' subnet is worth probing;
+                # asking every phone and sensor for a miner API is noise.
+                if self._probe_nets and not _in_networks(ip, self._probe_nets):
+                    continue
                 skip = self._probe_skip.get(mac, 0)
                 if skip > 0:
                     self._probe_skip[mac] = skip - 1
@@ -917,6 +969,14 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
         if not record.ip:
             raise AsicError(f"{record.name}: no IP known, cannot blink")
         await self.asic.blink(record.ip, on)
+
+
+def _in_networks(ip: str, nets: list) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in net for net in nets)
 
 
 def _norm_mac(mac: str) -> str:

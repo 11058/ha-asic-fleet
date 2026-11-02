@@ -152,3 +152,22 @@ class TestAlgorithm:
         assert identity.algorithm_for("Whatsminer M50") == "unknown"
         assert identity.algorithm_for(None) == "unknown"
         assert identity.algorithm_for("") == "unknown"
+
+
+def test_placement_names():
+    """Racks on a farm and places on a multi-building site, one pattern."""
+    import re
+
+    const = load_module("const")
+    identity = load_module("identity")
+    pattern = re.compile(const.DEFAULT_HOSTNAME_PATTERN)
+    cases = {
+        "R1-ASIC3": ("R1", 3),
+        "R12-ASIC10": ("R12", 10),
+        "Garazh-ASIC2": ("Garazh", 2),
+        "Garazh2-ASIC1": ("Garazh2", 1),
+        "Баня-ASIC1": ("Баня", 1),
+        "Antminer": (None, None),
+    }
+    for name, expected in cases.items():
+        assert identity.parse_rack(pattern.match(name)) == expected, name

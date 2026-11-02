@@ -38,6 +38,7 @@ from .const import (
     CONF_HW_ERROR_PCT,
     CONF_MARKER_LIST,
     CONF_OFFLINE_GRACE,
+    CONF_PROBE_SUBNETS,
     CONF_PROBE_UNKNOWN,
     CONF_ROUTER_HOST,
     CONF_ROUTER_PASSWORD,
@@ -197,6 +198,10 @@ class AsicFleetOptionsFlow(OptionsFlow):
                     CONF_PROBE_UNKNOWN,
                     default=options.get(CONF_PROBE_UNKNOWN, DEFAULT_PROBE_UNKNOWN),
                 ): BooleanSelector(),
+                vol.Optional(
+                    CONF_PROBE_SUBNETS,
+                    default=options.get(CONF_PROBE_SUBNETS, ""),
+                ): TextSelector(),
                 vol.Optional(
                     CONF_BLOCKLIST,
                     default=options.get(CONF_BLOCKLIST, DEFAULT_BLOCKLIST),

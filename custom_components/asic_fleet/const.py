@@ -39,7 +39,14 @@ DEFAULT_SCAN_INTERVAL: Final = 30
 DEFAULT_ASIC_PORT: Final = 80
 DEFAULT_ASIC_USERNAME: Final = "root"
 DEFAULT_ROUTER_USERNAME: Final = "ha-asic"
-DEFAULT_HOSTNAME_PATTERN: Final = r"^R(?P<rack>\d+)-ASIC(?P<index>\d+)$"
+# Racks on a farm ("R1-ASIC3") or places on a site ("Garazh-ASIC2",
+# "Баня-ASIC1"); the rack branch comes first so "R1" stays a rack.
+DEFAULT_HOSTNAME_PATTERN: Final = (
+    r"^(?:R(?P<rack>\d+)|(?P<place>[^\W\d_][\w]*?))-ASIC(?P<index>\d+)$"
+)
+# Interfaces whose subnets hold miners, when no subnet is configured.
+ASIC_INTERFACE_HINTS: Final = ("asic", "miner")
+ASIC_VLAN_ID: Final = 64
 DEFAULT_BLOCKLIST: Final = "asic_blocked"
 DEFAULT_MARKER_LIST: Final = "asic_blocked_hosts"
 # Antminer L7/L9 chips sit at 70-85 C in normal operation, so a 75 C warning

@@ -14,7 +14,7 @@
 
 # ---------------------------- TUNABLES ---------------------------------------
 :local haUserPassword   "REPLACE_WITH_LONG_RANDOM_PASSWORD"
-:local haAddress        "10.100.20.5/32"     ;# Home Assistant's IP
+:local haAddress        "10.100.20.5/32"     ;# Home Assistant IP: CHANGE for your site (BitBarn: 10.100.20.5, Beregovaya: 10.5.20.5)
 :local wanList          "WAN"                ;# /interface/list/print
 :local dhcpServer       "dhcp-servers"       ;# DHCP server serving the racks
 :local useTls           false                ;# true => www-ssl (443), false => www (80)

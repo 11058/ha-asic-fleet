@@ -36,7 +36,7 @@
         "title": "ASIC Fleet options",
         "data": {
           "scan_interval": "Poll interval (seconds)",
-          "hostname_pattern": "Hostname pattern (regex with rack/index groups)",
+          "hostname_pattern": "Name pattern (regex): rack R1-ASIC3 or place Garazh-ASIC2; groups rack/place and index",
           "probe_unknown": "Probe unknown DHCP leases for miners",
           "blocklist": "Firewall address-list (IP entries)",
           "marker_list": "Firewall address-list (block intent markers)",
@@ -48,7 +48,8 @@
           "offline_grace": "Offline grace period (seconds)",
           "fail_threshold": "Consecutive polls before raising a problem",
           "allow_reboot": "Allow reboot",
-          "allow_pool_write": "Allow pool configuration writes"
+          "allow_pool_write": "Allow pool configuration writes",
+          "probe_subnets": "Miner subnets to probe (comma separated; empty = the router's ASIC segment: an *asic* interface or VLAN 64)"
         },
         "data_description": {
           "probe_unknown": "Finds miners that never publish a DHCP hostname (e.g. Antminer L9) by asking each unknown lease whether it answers the miner CGI API.",

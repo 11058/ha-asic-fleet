@@ -102,14 +102,19 @@ def resolve_name(
 
 
 def parse_rack(match: re.Match[str] | None) -> tuple[str | None, int | None]:
-    """Pull rack and index out of a hostname pattern match."""
+    """Pull the placement and index out of a hostname pattern match.
+
+    The placement is a rack on a farm ("R1-ASIC3" -> R1) or a place on a
+    site with several buildings ("Garazh-ASIC2" -> Garazh, "Баня-ASIC1" ->
+    Баня). Patterns may name the group ``rack``, ``place`` or ``group``.
+    """
     if not match:
         return None, None
     groups = match.groupdict()
-    rack = groups.get("rack")
+    rack = groups.get("rack") or groups.get("place") or groups.get("group")
     raw_index = groups.get("index")
     index = int(raw_index) if raw_index and raw_index.isdigit() else None
-    if rack and not rack.upper().startswith("R"):
+    if rack and rack.isdigit():
         rack = f"R{rack}"
     return rack, index
 
