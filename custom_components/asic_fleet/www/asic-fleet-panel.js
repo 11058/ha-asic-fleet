@@ -166,13 +166,15 @@ class AsicFleetPanel extends HTMLElement {
   _tile(f, m) {
     const [cls, label] = STATUS[m.status] || ["unk", m.status];
     const probs = Object.keys(m.problems || {}).filter((k) => k !== "offline");
+    const why = (m.issues || []).map((i) => i.text).join("\n") || m.error || "";
     const num = m.index ?? "·";
     const plug = m.plug ? `<span title="${esc(m.plug.name)}" class="${m.plug.state === "on" ? "good" : "sub"}">🔌${m.plug.power !== null && m.plug.power !== undefined ? ` ${Math.round(m.plug.power)}Вт` : ""}</span>` : "";
-    return `<button class="tile ${cls}" data-do="open" data-entry="${esc(f.entry_id)}" data-mac="${esc(m.mac)}">
+    return `<button class="tile ${cls}" title="${esc(why)}" data-do="open" data-entry="${esc(f.entry_id)}" data-mac="${esc(m.mac)}">
       <div class="trow"><span class="num">${esc(num)}</span><span class="nm">${esc(m.name)}</span></div>
       <div class="trow"><b>${m.blocked ? "⛔ стоп" : m.online ? rate(m.rate) : "нет связи"}</b>
         <span class="grow"></span>${m.temp_max !== null && m.temp_max !== undefined ? `<span class="${m.temp_status === "critical" ? "bad" : m.temp_status === "warning" ? "warn" : ""}">${m.temp_max}°</span>` : ""}</div>
       <div class="trow sub">${esc(label)}${probs.length && (PROBLEM[probs[0]] || probs[0]) !== label ? ` · <span class="warn">${esc(PROBLEM[probs[0]] || probs[0])}</span>` : ""}<span class="grow"></span>${plug}</div>
+      ${why && m.status !== "ok" ? `<div class="twhy">${esc(why.split("\n")[0])}</div>` : ""}
     </button>`;
   }
 
@@ -213,8 +215,10 @@ class AsicFleetPanel extends HTMLElement {
         <div><div class="title2">${esc(m.name)}</div><div class="sub">${esc(m.place || "")} · ${esc(m.model || "модель ?")} · ${esc(m.ip || "нет IP")}</div></div>
         <span class="grow"></span><button class="x" data-do="close">✕</button></div>
       <div class="pill ${cls}">${esc(label)}</div>
-      ${m.error && !m.blocked ? `<div class="sub bad">${esc(m.error)}</div>` : ""}
-      ${Object.keys(m.problems || {}).length ? `<div class="sub warn">${Object.keys(m.problems).map((k) => esc(PROBLEM[k] || k)).join(" · ")}</div>` : ""}
+      ${(m.issues || []).length ? `<ul class="issues">${m.issues.map((i) =>
+        `<li class="${i.severity === "critical" ? "bad" : i.severity === "info" ? "sub" : "warn"}">${esc(i.text)}</li>`).join("")}</ul>`
+        : m.error && !m.blocked ? `<div class="sub bad">${esc(m.error)}</div>` : ""}
+      ${(m.miner_says || []).length ? `<div class="sub">Майнер сообщает: <span class="warn">${m.miner_says.map(esc).join(" · ")}</span></div>` : ""}
       ${m.blocked && !m.block_synced ? `<div class="sub bad">Блокировка ещё не применилась к текущему IP</div>` : ""}
       <table class="kv">
         ${row("Хешрейт", `${rate(m.rate)}${m.rate_ideal ? ` <span class="sub">из ${rate(m.rate_ideal)}</span>` : ""}`)}
@@ -310,6 +314,9 @@ const STYLE = `
   .muted { color: var(--secondary-text-color); padding: 8px; }
   .error { background: var(--error-color); color: #fff; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; }
   .good { color: var(--success-color, #2e7d32); } .warn { color: var(--warning-color, #ef6c00); }
+  .issues { margin: 6px 0; padding-left: 18px; } .issues li { margin: 2px 0; }
+  .twhy { font-size: 11px; line-height: 1.25; color: var(--secondary-text-color); margin-top: 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-align: left; }
   .bad { color: var(--error-color, #c62828); } .blk-t { color: #7e57c2; }
   .sum { display:flex; flex-wrap: wrap; gap: 8px 22px; align-items: baseline; padding: 12px 14px; margin-bottom: 12px;
     background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 12px; }

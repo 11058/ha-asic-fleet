@@ -67,6 +67,7 @@ from .const import (
     PROBLEM_UNNAMED,
     SEVERITY,
 )
+from .explain import bad_chains
 from .identity import (
     algorithm_for,
     duplicate_hostnames,
@@ -106,6 +107,7 @@ class AsicRecord:
     lease_active: bool = False
     telemetry: AsicTelemetry = field(default_factory=AsicTelemetry)
     problems: dict[str, str] = field(default_factory=dict)
+    problem_details: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_seen: datetime | None = None
     model: str | None = None
     firmware: str | None = None
@@ -763,12 +765,13 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
                         }
 
                 if tel.fan_rpm and (tel.fan_min or 0) < fan_min:
-                    raised[PROBLEM_FAN] = {"fan_rpm": tel.fan_rpm}
+                    raised[PROBLEM_FAN] = {"fan_rpm": tel.fan_rpm, "fan_min": fan_min}
 
                 if tel.chip_total and tel.chip_ok != tel.chip_total:
                     raised[PROBLEM_CHIPS] = {
                         "chip_ok": tel.chip_ok,
                         "chip_total": tel.chip_total,
+                        "bad_chains": bad_chains(tel.chain_maps),
                     }
 
                 if tel.hw_error_pct is not None and tel.hw_error_pct > hw_pct:
@@ -806,6 +809,7 @@ class FleetCoordinator(DataUpdateCoordinator[FleetData]):
             if count < needed:
                 continue
             record.problems[code] = SEVERITY.get(code, "warning")
+            record.problem_details[code] = details
             if code not in active:
                 active[code] = record.problems[code]
                 self.hass.bus.async_fire(

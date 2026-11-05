@@ -13,6 +13,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_ALIASES, CONF_ALLOW_REBOOT, DOMAIN
+from .explain import miner_flags_text, problem_text
 
 
 def _coordinators(hass: HomeAssistant):
@@ -66,6 +67,15 @@ def _miner(hass: HomeAssistant, r) -> dict[str, Any]:
         "status": r.hashrate_status,
         "temp_status": r.temp_status,
         "problems": r.problems,
+        "issues": [
+            {
+                "code": c,
+                "severity": sev,
+                "text": problem_text(c, r.problem_details.get(c)),
+            }
+            for c, sev in r.problems.items()
+        ],
+        "miner_says": miner_flags_text(t.status_flags),
         "error": r.error,
         "rate": t.rate_30m if t.rate_30m is not None else t.rate_5s,
         "rate_ideal": t.rate_ideal,

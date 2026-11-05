@@ -36,6 +36,22 @@ RATE_FACTORS = {
 }
 
 
+def http_error_text(err: Exception) -> str:
+    """httpx timeouts stringify to ''; say what happened instead."""
+    if isinstance(err, httpx.TimeoutException):
+        return "нет ответа (таймаут): майнер выключен, завис или закрыт firewall"
+    if isinstance(err, httpx.ConnectError):
+        text = str(err).lower()
+        if "refused" in text:
+            return "соединение отклонено: веб-интерфейс майнера не запущен"
+        if "unreachable" in text or "no route" in text:
+            return "нет маршрута до майнера"
+        return f"не удалось подключиться: {err or type(err).__name__}"
+    if isinstance(err, httpx.RemoteProtocolError):
+        return "майнер оборвал соединение"
+    return str(err) or type(err).__name__
+
+
 class AsicError(Exception):
     """Miner unreachable or answered with garbage."""
 
@@ -69,6 +85,7 @@ class AsicTelemetry:
     temp_max: int | None = None
     status_flags: dict[str, Any] = field(default_factory=dict)
     chain_sn: list[str] = field(default_factory=list)
+    chain_maps: list[str] = field(default_factory=list)
     pool_url: str | None = None
     pool_user: str | None = None
     pool_status: str | None = None
@@ -124,9 +141,9 @@ class AsicClient:
                 self._url(ip, cgi), auth=self._auth, timeout=HTTP_TIMEOUT
             )
         except httpx.HTTPError as err:
-            raise AsicError(f"{ip} {cgi}: {err}") from err
+            raise AsicError(f"{ip}: {http_error_text(err)}") from err
         if resp.status_code == 401:
-            raise AsicAuthError(f"{ip} {cgi}: digest auth rejected")
+            raise AsicAuthError(f"{ip}: майнер не принял логин/пароль")
         if resp.status_code >= 400:
             raise AsicError(f"{ip} {cgi}: HTTP {resp.status_code}")
         try:
@@ -140,9 +157,9 @@ class AsicClient:
                 self._url(ip, cgi), auth=self._auth, json=payload, timeout=HTTP_TIMEOUT
             )
         except httpx.HTTPError as err:
-            raise AsicError(f"{ip} {cgi}: {err}") from err
+            raise AsicError(f"{ip}: {http_error_text(err)}") from err
         if resp.status_code == 401:
-            raise AsicAuthError(f"{ip} {cgi}: digest auth rejected")
+            raise AsicAuthError(f"{ip}: майнер не принял логин/пароль")
         if resp.status_code >= 400:
             raise AsicError(f"{ip} {cgi}: HTTP {resp.status_code}")
         return resp.text
@@ -303,6 +320,7 @@ def _parse_stats(payload: Any, out: AsicTelemetry) -> None:
             if isinstance(temp, (int, float)) and temp > 0:
                 temps.append(int(temp))
         # `asic` is a chip map like "oooooo oooooo xoooo": 'o' good, else bad.
+        out.chain_maps.append(str(chain.get("asic") or ""))
         for char in (chain.get("asic") or "").replace(" ", ""):
             chips_total += 1
             if char == "o":
