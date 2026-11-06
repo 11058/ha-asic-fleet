@@ -140,11 +140,12 @@ class AsicFleetPanel extends HTMLElement {
            <button class="act" data-do="cancel">Нет</button>`
         : `<button class="act sm" data-do="bulk-ask" data-p="${esc(p)}" data-a="block">⛔ все</button>
            <button class="act sm" data-do="bulk-ask" data-p="${esc(p)}" data-a="unblock">▶ все</button>`) : "";
-      return `<section class="group">
+      return `<section class="group ${list.length > 8 ? "big" : ""}">
         <div class="ghead"><h2>${esc(p)}</h2><span class="sub">${on}/${list.length} в сети · ${this._groupRate(list)}</span><span class="grow"></span>${bulk}</div>
         <div class="tiles">${list.map((m) => this._tile(f, m)).join("")}</div>
       </section>`;
     }).join("");
+    const groupsHtml = `<div class="groups">${body}</div>`;
     return `
       <div class="fhead"><h1>${esc(f.title)}</h1>
         <span class="sub">${f.router.online ? "роутер на связи" : `<span class="bad">роутер: ${esc(f.router.error || "нет связи")}</span>`}</span></div>
@@ -154,7 +155,7 @@ class AsicFleetPanel extends HTMLElement {
         <input id="q" placeholder="Поиск: имя, IP, MAC, модель" value="${esc(this._q)}">
         <label><input type="checkbox" id="onlyp" ${this._onlyProblems ? "checked" : ""}> только проблемы</label>
       </div>
-      ${body || '<div class="muted">Нет майнеров</div>'}`;
+      ${body ? groupsHtml : '<div class="muted">Нет майнеров</div>'}`;
   }
 
   _groupRate(list) {
@@ -329,7 +330,10 @@ const STYLE = `
   .filters { display:flex; gap: 12px; align-items:center; margin-bottom: 12px; flex-wrap: wrap; }
   .filters input:not([type]) { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--divider-color);
     background: var(--secondary-background-color); color: var(--primary-text-color); }
-  .group { margin-bottom: 16px; }
+  /* Groups side by side on wide screens; a big group takes the whole row. */
+  .groups { display:grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 0 20px; align-items: start; }
+  .group { margin-bottom: 16px; min-width: 0; }
+  .group.big { grid-column: 1 / -1; }
   .ghead { display:flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 2px 8px; }
   .grow { flex: 1; }
   .tiles { display:grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
