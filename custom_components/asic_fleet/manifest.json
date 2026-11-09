@@ -6,6 +6,7 @@
   ],
   "config_flow": true,
   "dependencies": [
+    "frontend",
     "http",
     "network",
     "panel_custom",
@@ -16,5 +17,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/11058/ha-asic-fleet/issues",
   "requirements": [],
-  "version": "0.6.2"
+  "version": "0.7.0"
 }

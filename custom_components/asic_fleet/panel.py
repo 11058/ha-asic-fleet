@@ -35,6 +35,10 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
         [StaticPathConfig(STATIC, str(WWW), cache_headers=False)]
     )
     version = (await async_get_integration(hass, DOMAIN)).version or "0"
+    # Also on every dashboard: the same page as a card (custom:asic-fleet-card).
+    from homeassistant.components.frontend import add_extra_js_url
+
+    add_extra_js_url(hass, f"{STATIC}/{BUNDLE}?v={version}")
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name="asic-fleet-panel",

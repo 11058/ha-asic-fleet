@@ -36,6 +36,15 @@ blink, reboot if allowed, rename/move). Any `switch` entity — a smart
 plug — can be linked to a miner: its state and metered power show on the
 tile, and the miner can be power-cycled from the panel.
 
+## The page as a dashboard tab
+
+The same page as «ASIC» in the sidebar is a card, `custom:asic-fleet-card` (no resource to add).
+Dashboard → ✎ → add view → view type **Panel (single card)** → add card → manual:
+
+```yaml
+type: custom:asic-fleet-card
+```
+
 ## Placement: racks or buildings
 
 Miners are grouped by **placement**, taken from the DHCP hostname:
